@@ -1,0 +1,9 @@
+# Python（バックエンド）の不要なもの
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Flutter（フロントエンド）の不要なもの
+frontend/build/
+frontend/.dart_tool/
+.DS_Store
