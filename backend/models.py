@@ -37,10 +37,9 @@ class Schedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=False)
     trash_type_id = db.Column(db.Integer, db.ForeignKey('trash_types.id'), nullable=False)
-    day_of_week = db.Column(db.Integer, nullable=False) # 0=月曜
-    week_order = db.Column(db.Integer, default=0) # 0=毎週
+    date = db.Column(db.Date, nullable=False) 
 
-    # リレーション設定（スケジュールからゴミ情報をすぐ取れるようにする）
+    # リレーション設定
     trash_type = db.relationship('TrashType', backref='schedules')
     area = db.relationship('Area', backref='schedules')
 

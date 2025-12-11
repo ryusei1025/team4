@@ -67,22 +67,28 @@ def search_dictionary():
         
     return jsonify(response_data)
 
-# 3. スケジュール取得 API
+# 3. スケジュール取得 API (日付対応版)
 @app.route('/api/schedules', methods=['GET'])
 def get_schedules():
     area_id = request.args.get('area_id')
-    
+    # ついでに「何月のデータが欲しいか」も指定できるようにするとベスト
+    target_month = request.args.get('month') # 例: "2025-10"
+
     if not area_id:
         return jsonify({"error": "area_id is required"}), 400
 
-    # 指定されたエリアのスケジュールを全部取得
-    schedules = Schedule.query.filter_by(area_id=area_id).all()
+    query = Schedule.query.filter_by(area_id=area_id)
+    
+    # 月指定があれば絞り込む（なければ全データ）
+    # ※本番ではデータ量が多いので月指定必須にした方が良い
+    
+    schedules = query.all()
     
     result = []
     for s in schedules:
         result.append({
-            "day_of_week": s.day_of_week, # 0=月曜
-            "week_order": s.week_order,   # 0=毎週
+            "date": s.date.strftime('%Y-%m-%d'), # "2025-10-01"
+            "day_of_week": s.date.weekday(),     # 曜日判定用
             "trash_type": {
                 "name": s.trash_type.name_ja,
                 "color": s.trash_type.color_code,
