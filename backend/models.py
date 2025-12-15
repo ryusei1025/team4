@@ -64,14 +64,16 @@ class TrashDictionary(db.Model):
     # リレーション
     trash_type = db.relationship('TrashType', backref='dictionaries')
 
-# 6. ゴミ箱マップ
+# 6. ゴミ箱マップ (TrashBin)
 class TrashBin(db.Model):
     __tablename__ = 'trash_bins'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    address = db.Column(db.String(200))
-    latitude = db.Column(db.Float, nullable=False)
-    longitude = db.Column(db.Float, nullable=False)
+    name = db.Column(db.String(255), nullable=False) # 名称
+    address = db.Column(db.String(255))              # 住所
     
-    bin_type = db.Column(db.String(50)) # "缶・ビン" など
-    note = db.Column(db.String(200))
+    # ★重要: CSVにまだ緯度経度がないため、nullable=True (空でもOK) に変更
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    
+    bin_type = db.Column(db.String(255)) # 対象品目 (回収形態)
+    note = db.Column(db.Text)            # 備考 + 利用可能時間など

@@ -1,7 +1,8 @@
 import csv
 from datetime import datetime
 from app import app
-from models import db, Area, TrashType, Schedule, TrashDictionary
+# ★修正1: TrashBin を追加でインポート
+from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 
 def seed_data():
     with app.app_context():
@@ -13,8 +14,6 @@ def seed_data():
         # ---------------------------------------------------------
         # 2. ゴミ種別マスター作成
         # ---------------------------------------------------------
-        # CSVのIDとアプリ上のIDを合わせるための定義
-        # ※「大型ごみ」などはスケジュールにはないが辞書にはあるので追加
         trash_types_data = {
             1: {"name": "燃やせるごみ", "color": "#FF5733", "icon": "fire"},
             2: {"name": "燃やせないごみ", "color": "#3333FF", "icon": "delete"},
@@ -22,11 +21,9 @@ def seed_data():
             9: {"name": "容器包装プラスチック", "color": "#33FF57", "icon": "recycle"},
             10: {"name": "雑がみ", "color": "#885522", "icon": "description"},
             11: {"name": "枝・葉・草", "color": "#228822", "icon": "grass"},
-            99: {"name": "大型ごみ", "color": "#555555", "icon": "weekend"}, # 追加
+            99: {"name": "大型ごみ", "color": "#555555", "icon": "weekend"},
         }
 
-        # 文字列からIDへの変換マップを作成 (辞書CSV読み込み用)
-        # CSVの「分別区分」の文字と、ここのキーを一致させる必要があります
         type_name_map = {
             "燃やせるごみ": 1,
             "燃やせないごみ": 2,
@@ -89,31 +86,21 @@ def seed_data():
 
 
         # ---------------------------------------------------------
-        # 4. ゴミ分別辞書CSVの読み込み (New!)
+        # 4. ゴミ分別辞書CSVの読み込み
         # ---------------------------------------------------------
         try:
             with open('dataset/trash_dictionary.csv', encoding='utf-8-sig') as f:
-                # DictReaderを使うと '品目', '分別区分' などの列名で取得できて便利
                 reader = csv.DictReader(f)
-
-                print("CSVの列名:", reader.fieldnames)
                 
                 dictionary_list = []
                 for row in reader:
-                    # CSVの列名に合わせてデータを取得
                     name = row.get('品目')
                     category_name = row.get('分別区分')
                     fee = row.get('手数料')
                     note = row.get('備考')
 
                     if not name: continue
-
-                    # 分別区分(文字)をID(数字)に変換
-                    # マップにない場合（例: 空欄など）は None にする
                     t_id = type_name_map.get(category_name)
-
-                    # IDが見つからない場合、もしCSVに「乾電池」などマップにない文字があれば
-                    # ここでエラーになるか、Noneになる。今回はNoneで登録して動くようにする。
                     
                     d = TrashDictionary(
                         name=name,
@@ -129,6 +116,59 @@ def seed_data():
 
         except FileNotFoundError:
             print("エラー: dataset/trash_dictionary.csv が見つかりません。")
+
+        # ---------------------------------------------------------
+        # 5. ゴミ箱マップCSVの読み込み (座標対応版)
+        # ---------------------------------------------------------
+        try:
+            # ★ここを修正: 新しいファイル名 'trash_bins_geo.csv' を指定
+            file_path = 'dataset/trash_bins_geo.csv'
+            
+            # まだ変換ファイルがない場合のエラー回避（念のため）
+            import os
+            if not os.path.exists(file_path):
+                print("座標付きファイルがないため、元のCSVを使います")
+                file_path = 'dataset/trash_bins.csv'
+
+            with open(file_path, encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                
+                bin_list = []
+                for row in reader:
+                    if not row.get('名称'): continue
+
+                    # 備考欄の作成
+                    time_info = f"{row.get('開始時間', '')}～{row.get('終了時間', '')}"
+                    days = row.get('利用可能曜日', '')
+                    memo = row.get('備考', '')
+                    full_note = f"【時間】{time_info} ({days}) / {memo}"
+                    
+                    # ★ここを修正: CSVから緯度経度を取り出す
+                    lat_str = row.get('latitude')
+                    lon_str = row.get('longitude')
+                    
+                    # 空っぽのときは None、数字があるときは float(小数) に変換
+                    lat = float(lat_str) if lat_str and lat_str.strip() else None
+                    lon = float(lon_str) if lon_str and lon_str.strip() else None
+
+                    new_bin = TrashBin(
+                        name=row.get('名称'),
+                        address=row.get('住所'),
+                        bin_type=row.get('対象品目'),
+                        note=full_note,
+                        latitude=lat,  # ★取得した値を入れる
+                        longitude=lon  # ★取得した値を入れる
+                    )
+                    bin_list.append(new_bin)
+
+                db.session.add_all(bin_list)
+                db.session.commit()
+                print(f"ゴミ箱データ登録完了: {len(bin_list)}件 (座標ファイル使用)")
+
+        except FileNotFoundError:
+            print(f"エラー: {file_path} が見つかりません。datasetフォルダを確認してください。")
+        except ValueError as e:
+            print(f"データの変換エラー: {e}")
 
 if __name__ == '__main__':
     seed_data()
