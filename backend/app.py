@@ -1,52 +1,47 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin, User
-import google.generativeai as genai
+from models import db, Area, User, TrashType, Schedule, TrashDictionary, TrashBin
 import os
-import base64
+import google.generativeai as genai
+from PIL import Image
+import io
+import json
+from dotenv import load_dotenv # ★追加: これで.envを読み込みます
 
+# .envファイルを読み込む (これがエラーの原因でした！)
+load_dotenv()
+
+# アプリケーション設定
 app = Flask(__name__)
 app.json.ensure_ascii = False
-CORS(app)
-
-# ---------------------------------------------------------
-# 1. データベース設定 (PostgreSQLに変更)
-# ---------------------------------------------------------
-# 書式: postgresql://ユーザー名:パスワード@ホスト:ポート/DB名
-# ※ご自身の環境に合わせて "password" の部分を変更してください
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:postgres@localhost:5432/garbage_app'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# CORSとDBの初期化
+CORS(app)
 db.init_app(app)
 
-# ---------------------------------------------------------
-# 2. Gemini API設定
-# ---------------------------------------------------------
-# 環境変数または直接キーを設定
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+# Gemini APIの設定 (.envから読み込み)
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-# ---------------------------------------------------------
-# API エンドポイント実装
-# ---------------------------------------------------------
+# ----------------------------------------------------------------
+# API ルート定義
+# ----------------------------------------------------------------
 
 @app.route('/')
-def home():
-    return "Banana API Server (PostgreSQL) is Running!"
+def index():
+    return jsonify({"message": "Banana API Server is running!"})
 
 # (1) エリア一覧取得 API
 @app.route('/api/areas', methods=['GET'])
 def get_areas():
-    areas = Area.query.all()
-    result = []
-    for area in areas:
-        result.append({
-            "id": area.id,
-            "name": area.name,
-            "calendar_no": area.calendar_no
-        })
-    return jsonify(result)
+    try:
+        areas = Area.query.all()
+        return jsonify([area.to_dict() for area in areas])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # (2) スケジュール取得 API
 @app.route('/api/schedules', methods=['GET'])
@@ -54,119 +49,109 @@ def get_schedules():
     area_id = request.args.get('area_id')
     if not area_id:
         return jsonify({"error": "area_id is required"}), 400
-
-    # 本来は year, month でフィルタリングするが、今回は全件または直近を返す
-    schedules = Schedule.query.filter_by(area_id=area_id).all()
-    
-    result = []
-    for sch in schedules:
-        trash_type = TrashType.query.get(sch.trash_type_id)
-        result.append({
-            "date": sch.date.isoformat(),
-            "trash_type_id": sch.trash_type_id,
-            "trash_name": trash_type.name_ja if trash_type else "不明",
-            "color": trash_type.color_code if trash_type else "#000000",
-            "icon": trash_type.icon_name if trash_type else "help"
-        })
-    return jsonify(result)
-
-# (3) 辞書検索 API
-@app.route('/api/trash_dictionary', methods=['GET'])
-def search_dictionary():
-    keyword = request.args.get('q', '')
-    if not keyword:
-        return jsonify([])
-
-    # 部分一致検索 (名前 または 備考)
-    results = TrashDictionary.query.filter(
-        (TrashDictionary.name.contains(keyword)) | 
-        (TrashDictionary.note.contains(keyword))
-    ).all()
-    
-    data = []
-    for r in results:
-        t_type = TrashType.query.get(r.trash_type_id)
-        data.append({
-            "id": r.id,
-            "name": r.name,
-            "note": r.note,
-            "trash_type_name": t_type.name_ja if t_type else "不明"
-        })
-    return jsonify(data)
-
-# (4) AI画像解析 API
-@app.route('/api/analyze_image', methods=['POST'])
-def analyze_image():
-    if not GOOGLE_API_KEY:
-        return jsonify({"error": "Server API Key not set"}), 500
-        
     try:
-        req_data = request.get_json()
-        image_data = req_data.get('image') # base64 string
-        
-        if not image_data:
-            return jsonify({"error": "No image data"}), 400
-
-        # プロンプトの作成
-        prompt = """
-        この画像を分析し、札幌市のゴミ分別ルールに基づいてゴミの種類を判定してください。
-        回答は必ず以下のJSON形式のみで返してください。Markdown記法は不要です。
-        {
-            "result_id": (燃やせる=1, 燃やせない=2, 資源=8, プラ=9, 雑がみ=10, その他=99 から選択),
-            "result_name": "ゴミ種別名",
-            "confidence": "high/medium/low",
-            "message": "短いアドバイス(例: 新聞紙に包んで出してください)"
-        }
-        """
-        
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # Base64をデコードせずにGeminiに渡す方法もあるが、辞書型で渡すのが一般的
-        response = model.generate_content([
-            {'mime_type': 'image/jpeg', 'data': image_data},
-            prompt
-        ])
-        
-        # Markdownの ```json ... ``` を除去
-        clean_text = response.text.replace('```json', '').replace('```', '').strip()
-        
-        return clean_text, 200, {'Content-Type': 'application/json'}
-
+        schedules = Schedule.query.filter_by(area_id=area_id).order_by(Schedule.date).all()
+        return jsonify([s.to_dict() for s in schedules])
     except Exception as e:
-        print(f"AI Error: {e}")
         return jsonify({"error": str(e)}), 500
 
-# (5) ゴミ箱マップ API (新規追加)
+# (3) 分別辞書 検索 API
+@app.route('/api/trash_dictionary', methods=['GET'])
+def search_trash_dictionary():
+    keyword = request.args.get('q')
+    try:
+        if keyword:
+            # 名前 または 備考(note) で検索できるように改良
+            results = TrashDictionary.query.filter(
+                (TrashDictionary.name.contains(keyword)) | 
+                (TrashDictionary.note.contains(keyword))
+            ).all()
+        else:
+            results = TrashDictionary.query.all()
+        return jsonify([item.to_dict() for item in results])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# (4) ゴミ箱マップ API (★以前の機能を復元・改良しました)
 @app.route('/api/trash_bins', methods=['GET'])
 def get_trash_bins():
     try:
-        lat = float(request.args.get('lat', 43.062)) # デフォルト: 札幌中心部
+        # URLパラメータから緯度経度を取得 (デフォルトは札幌駅周辺)
+        lat = float(request.args.get('lat', 43.062))
         lon = float(request.args.get('lon', 141.354))
-        radius = int(request.args.get('radius', 1000)) # 半径m
+        radius = int(request.args.get('radius', 1000)) # 半径m (デフォルト1km)
 
-        # 簡易的な範囲検索 (本来はPostGISのST_DWithinを使うと正確)
-        # 緯度経度 1度 ≒ 111km, 0.01度 ≒ 1.1km
+        # 簡易的な範囲検索 (1度 ≒ 111km)
         delta = radius / 111000.0
         
+        # 指定範囲内のゴミ箱を検索
         bins = TrashBin.query.filter(
             TrashBin.latitude.between(lat - delta, lat + delta),
             TrashBin.longitude.between(lon - delta, lon + delta)
         ).all()
 
-        result = []
-        for b in bins:
-            result.append({
-                "id": b.id,
-                "name": b.name,
-                "latitude": b.latitude,
-                "longitude": b.longitude,
-                "bin_type": b.bin_type,
-                "address": b.address
-            })
-        return jsonify(result)
-        
+        return jsonify([b.to_dict() for b in bins])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# (5) ユーザー新規登録 API
+@app.route('/api/users', methods=['POST'])
+def create_user():
+    data = request.json
+    try:
+        new_user = User(area_id=data.get('area_id'))
+        db.session.add(new_user)
+        db.session.commit()
+        return jsonify({"message": "User created", "user": new_user.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# (6) Gemini 画像解析 API
+@app.route('/api/analyze_image', methods=['POST'])
+def analyze_image():
+    if not GEMINI_API_KEY:
+        return jsonify({"error": "Server configuration error: Gemini API Key not found"}), 500
+
+    # 画像ファイルのチェック
+    if 'image' not in request.files:
+        return jsonify({"error": "No image file provided"}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        # 画像を読み込む
+        img = Image.open(file.stream)
+
+        # Geminiモデルの準備
+        model = genai.GenerativeModel('gemini-1.5-flash')
+
+        # プロンプト
+        prompt = """
+        あなたはゴミ分別の専門家です。
+        この画像を分析し、以下の情報をJSON形式のみで出力してください。
+        Markdown記法は不要です。
+        
+        {
+            "name": "ゴミの名前",
+            "type": "分別種別（燃えるゴミ、資源ゴミ、不燃ゴミなど）",
+            "message": "捨て方のアドバイス"
+        }
+        """
+
+        # AIを実行
+        response = model.generate_content([prompt, img])
+        
+        # 結果のクリーニング
+        text = response.text.replace('```json', '').replace('```', '').strip()
+        
+        return jsonify(json.loads(text))
+
+    except Exception as e:
+        print(f"Gemini Error: {e}")
+        return jsonify({"error": "Analysis failed", "details": str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True)
