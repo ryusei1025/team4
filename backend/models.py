@@ -43,22 +43,37 @@ class Schedule(db.Model):
     trash_type = db.relationship('TrashType', backref='schedules')
     area = db.relationship('Area', backref='schedules')
 
+# backend/models.py (抜粋)
+
 # 5. ゴミ分別辞書
 class TrashDictionary(db.Model):
-    __tablename__ = 'trash_dictionary'
+    __tablename__ = 'trash_dictionaries'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    name_kana = db.Column(db.String(100), nullable=False)
-    trash_type_id = db.Column(db.Integer, db.ForeignKey('trash_types.id'), nullable=False)
-    note = db.Column(db.Text)
     
-    trash_type = db.relationship('TrashType')
+    # nameを100→255に拡張
+    name = db.Column(db.String(255), nullable=False) 
+    
+    # note(備考)をString→Text(無制限)に変更 ※ここがエラーの主原因の可能性大
+    note = db.Column(db.Text) 
+    
+    # fee(手数料)を50→100に拡張
+    fee = db.Column(db.String(100))
+    
+    trash_type_id = db.Column(db.Integer, db.ForeignKey('trash_types.id'), nullable=True)
 
-# 6. ゴミ箱マップ
+    # リレーション
+    trash_type = db.relationship('TrashType', backref='dictionaries')
+
+# 6. ゴミ箱マップ (TrashBin)
 class TrashBin(db.Model):
     __tablename__ = 'trash_bins'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    latitude = db.Column(db.Float, nullable=False)
-    longitude = db.Column(db.Float, nullable=False)
-    bin_type = db.Column(db.String(50))
+    name = db.Column(db.String(255), nullable=False) # 名称
+    address = db.Column(db.String(255))              # 住所
+    
+    # ★重要: CSVにまだ緯度経度がないため、nullable=True (空でもOK) に変更
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    
+    bin_type = db.Column(db.String(255)) # 対象品目 (回収形態)
+    note = db.Column(db.Text)            # 備考 + 利用可能時間など
