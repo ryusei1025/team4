@@ -110,10 +110,11 @@ def create_user():
 # (6) Gemini 画像解析 API
 @app.route('/api/analyze_image', methods=['POST'])
 def analyze_image():
+    # 1. APIキーの確認
     if not GEMINI_API_KEY:
         return jsonify({"error": "Server configuration error: Gemini API Key not found"}), 500
 
-    # 画像ファイルのチェック
+    # 2. 画像ファイルが送られてきているかチェック
     if 'image' not in request.files:
         return jsonify({"error": "No image file provided"}), 400
     
@@ -122,32 +123,35 @@ def analyze_image():
         return jsonify({"error": "No selected file"}), 400
 
     try:
-        # 画像を読み込む
+        # 3. 画像を読み込む (Pillowを使用)
         img = Image.open(file.stream)
 
-        # Geminiモデルの準備
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # 4. Geminiモデルの準備 (高速な flash モデルを使用)
+        model = genai.GenerativeModel('gemini-flash-latest')
 
-        # プロンプト
+        # 5. AIへの命令 (プロンプト)
+        # ここを変えるとAIのキャラが変わります！
         prompt = """
-        あなたはゴミ分別の専門家です。
-        この画像を分析し、以下の情報をJSON形式のみで出力してください。
-        Markdown記法は不要です。
-        
+        あなたは日本のゴミ分別の専門家です。
+        アップロードされた画像を解析し、以下の情報をJSON形式のみで出力してください。
+        Markdownの記法（```jsonなど）は含めないでください。
+
+        出力フォーマット:
         {
-            "name": "ゴミの名前",
-            "type": "分別種別（燃えるゴミ、資源ゴミ、不燃ゴミなど）",
-            "message": "捨て方のアドバイス"
+            "name": "ゴミの名前（例: ペットボトル、乾電池）",
+            "type": "ゴミの種別（例: 燃えるゴミ、資源ゴミ、不燃ゴミ、不明）",
+            "message": "分別のアドバイスを一言（例: ラベルとキャップを外して洗ってください）"
         }
         """
 
-        # AIを実行
+        # 6. AIを実行
         response = model.generate_content([prompt, img])
         
-        # 結果のクリーニング
-        text = response.text.replace('```json', '').replace('```', '').strip()
-        
-        return jsonify(json.loads(text))
+        # 7. 結果のクリーニング (Markdown記法を削除してJSONにする)
+        clean_text = response.text.replace('```json', '').replace('```', '').strip()
+        result_json = json.loads(clean_text)
+
+        return jsonify(result_json)
 
     except Exception as e:
         print(f"Gemini Error: {e}")
