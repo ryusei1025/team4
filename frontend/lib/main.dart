@@ -11,10 +11,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flask x Flutter Test',
-      home: const TestScreen(),
-    );
+    return MaterialApp(title: 'Flask x Flutter Test', home: const TestScreen());
   }
 }
 
@@ -34,9 +31,9 @@ class _TestScreenState extends State<TestScreen> {
     // Androidエミュレータの場合: 'http://10.0.2.2:5000/'
     // Web(Chrome)の場合: 'http://127.0.0.1:5000/'
     // 実機(iPhone/Android)の場合: PCのIPアドレス (例: http://192.168.x.x:5000/)
-    
+
     // ↓ とりあえずWebかAndroidエミュレータで試す想定で書きます
-    const String url = 'http://127.0.0.1:5000/'; 
+    const String url = 'http://127.0.0.1:5000/';
 
     try {
       final response = await http.get(Uri.parse(url));
@@ -46,7 +43,7 @@ class _TestScreenState extends State<TestScreen> {
         final data = jsonDecode(response.body);
         setState(() {
           // Flaskから来た "message" を画面に入れる
-          message = data['message']; 
+          message = data['message'];
         });
       } else {
         setState(() {
@@ -84,3 +81,28 @@ class _TestScreenState extends State<TestScreen> {
     );
   }
 }
+
+// area選択画面
+// import 'package:flutter/material.dart';
+// import 'calendar_page.dart';
+
+// /// エントリーポイント。
+// /// main.dart は最小限にして、実体は別ファイル（calendar_page.dart）へ分離します。
+// void main() {
+//   runApp(const MyApp());
+// }
+
+// /// アプリのルート。
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       title: '6x7 Calendar (2026+)',
+//       debugShowCheckedModeBanner: false,
+//       theme: ThemeData(useMaterial3: true),
+//       home: const CalendarPage(),
+//     );
+//   }
+// }
