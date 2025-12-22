@@ -1,14 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// 6行×7列の月カレンダー（2026年以降）
-/// - 曜日表示あり
-/// - 月切り替えは「縦スクロール」
-/// - 前月/次月の日付も薄く表示して自然につながる
-/// - 枠上部に年/月ドロップダウン（即移動）
-/// - 日付クリックで、下に「年月日・曜日・例文1・例文2」を表示
-/// - ヘッダー：左にエリア選択（中央より左寄り）、右端に言語選択
-/// - ★追加：ヘッダー最左に「三点リーダ」→ 左から Drawer（メニューバー）表示
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
@@ -16,11 +10,16 @@ class CalendarPage extends StatefulWidget {
   State<CalendarPage> createState() => _CalendarPageState();
 }
 
-bool _drawerOpen = false;
-
 enum UiLang { ja, en }
 
+class ExamplePair {
+  final String ex1;
+  final String ex2;
+  const ExamplePair({required this.ex1, required this.ex2});
+}
+
 class _CalendarPageState extends State<CalendarPage> {
+  // 2026年以降に限定
   static const int baseYear = 2026;
   static const int maxYear = 2100;
   static final DateTime baseMonth = DateTime(baseYear, 1, 1);
@@ -36,12 +35,24 @@ class _CalendarPageState extends State<CalendarPage> {
 
   DateTime? _selectedDate;
 
+  // Drawer開閉トグル用
+  bool _drawerOpen = false;
+
+  // 通知ON/OFF（サイドバーのスイッチ用）
+  bool _notificationEnabled = true;
+
   // ヘッダー：エリア選択
   final List<String> _areas = const ['中央区', '東区', '北区'];
   String _selectedArea = '中央区';
 
   // ヘッダー：言語
   UiLang _lang = UiLang.ja;
+
+  // ★JSONから読み込む：日付キー → 言語 → 例文
+  final Map<String, Map<UiLang, ExamplePair>> _examplesByDate = {};
+
+  // JSONの読み込み中表示用（必要なら使う）
+  bool _examplesLoaded = false;
 
   static const _weekdayEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   static const _weekdayJa = ['日', '月', '火', '水', '木', '金', '土'];
@@ -68,6 +79,9 @@ class _CalendarPageState extends State<CalendarPage> {
     _pageController = PageController(
       initialPage: initialIndex.clamp(0, totalMonths - 1),
     );
+
+    // ★JSON読み込み
+    _loadExamplesFromJson();
   }
 
   @override
@@ -76,6 +90,69 @@ class _CalendarPageState extends State<CalendarPage> {
     super.dispose();
   }
 
+  // =========================
+  // JSON 読み込み
+  // =========================
+  Future<void> _loadExamplesFromJson() async {
+    try {
+      final raw = await rootBundle.loadString('assets/examples.json');
+      final decoded = jsonDecode(raw);
+
+      if (decoded is! Map<String, dynamic>) {
+        setState(() => _examplesLoaded = true);
+        return;
+      }
+
+      final Map<String, Map<UiLang, ExamplePair>> parsed = {};
+
+      for (final entry in decoded.entries) {
+        final dateKey = entry.key; // "yyyy-mm-dd"
+        final val = entry.value;
+
+        if (val is! Map<String, dynamic>) continue;
+
+        Map<UiLang, ExamplePair> langMap = {};
+
+        // ja
+        final jaVal = val['ja'];
+        if (jaVal is Map<String, dynamic>) {
+          final ex1 = (jaVal['ex1'] ?? '').toString();
+          final ex2 = (jaVal['ex2'] ?? '').toString();
+          if (ex1.isNotEmpty || ex2.isNotEmpty) {
+            langMap[UiLang.ja] = ExamplePair(ex1: ex1, ex2: ex2);
+          }
+        }
+
+        // en
+        final enVal = val['en'];
+        if (enVal is Map<String, dynamic>) {
+          final ex1 = (enVal['ex1'] ?? '').toString();
+          final ex2 = (enVal['ex2'] ?? '').toString();
+          if (ex1.isNotEmpty || ex2.isNotEmpty) {
+            langMap[UiLang.en] = ExamplePair(ex1: ex1, ex2: ex2);
+          }
+        }
+
+        if (langMap.isNotEmpty) {
+          parsed[dateKey] = langMap;
+        }
+      }
+
+      setState(() {
+        _examplesByDate
+          ..clear()
+          ..addAll(parsed);
+        _examplesLoaded = true;
+      });
+    } catch (_) {
+      // 読み込み失敗でもアプリが落ちないようにする
+      setState(() => _examplesLoaded = true);
+    }
+  }
+
+  // =========================
+  // 便利関数
+  // =========================
   int _monthIndexFrom(DateTime base, DateTime target) {
     return (target.year - base.year) * 12 + (target.month - base.month);
   }
@@ -84,6 +161,32 @@ class _CalendarPageState extends State<CalendarPage> {
     final y = baseYear + (index ~/ 12);
     final m = 1 + (index % 12);
     return DateTime(y, m, 1);
+  }
+
+  String _dateKey(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
+  }
+
+  ExamplePair _getExamplesFor(DateTime d) {
+    final key = _dateKey(d);
+    final langMap = _examplesByDate[key];
+    if (langMap == null) return _defaultExamples();
+
+    // まず選択言語を優先
+    final hit = langMap[_lang];
+    if (hit != null) return hit;
+
+    // フォールバック：ja→en の順（どっちかあればそれを返す）
+    return langMap[UiLang.ja] ?? langMap[UiLang.en] ?? _defaultExamples();
+  }
+
+  ExamplePair _defaultExamples() {
+    if (_lang == UiLang.ja) {
+      return const ExamplePair(ex1: '例文1', ex2: '例文2');
+    }
+    return const ExamplePair(ex1: 'Example 1', ex2: 'Example 2');
   }
 
   void _handlePointerSignal(PointerSignalEvent event) {
@@ -135,7 +238,7 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   String _weekdayText(DateTime d) {
-    final idx = d.weekday % 7;
+    final idx = d.weekday % 7; // Sun=0..Sat=6
     return _lang == UiLang.ja ? _weekdayJa[idx] : _weekdayEn[idx];
   }
 
@@ -153,6 +256,9 @@ class _CalendarPageState extends State<CalendarPage> {
   String _labelLang() => _lang == UiLang.ja ? '言語' : 'Lang';
 
   String _placeholderText() {
+    if (!_examplesLoaded) {
+      return _lang == UiLang.ja ? '例文を読み込み中…' : 'Loading examples...';
+    }
     return _lang == UiLang.ja
         ? '日付をクリックすると、ここに「年月日・曜日・例文1・例文2」を表示します。'
         : 'Click a date to show “date, weekday, example 1, example 2” here.';
@@ -166,62 +272,53 @@ class _CalendarPageState extends State<CalendarPage> {
     );
     final months = List<int>.generate(12, (i) => i + 1);
 
+    final selectedExamples = (_selectedDate == null)
+        ? _defaultExamples()
+        : _getExamplesFor(_selectedDate!);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      // ★追加：Drawer の開閉状態を受け取る
+
       onDrawerChanged: (isOpen) {
         setState(() => _drawerOpen = isOpen);
       },
-      // ★ Drawer（左から出るメニューバー）
+
       drawer: _LeftMenuDrawer(
         lang: _lang,
         selectedArea: _selectedArea,
+        notificationEnabled: _notificationEnabled,
+        onNotificationChanged: (v) => setState(() => _notificationEnabled = v),
         onTapMenu: (key) {
-          // ここにメニューの処理を後から足せます（例：画面遷移・設定）
-          // 今は例として Drawer を閉じるだけにしています。
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(); // 今は閉じるだけ
         },
       ),
 
-      // ★ ヘッダー（AppBar）
       appBar: AppBar(
         centerTitle: true,
-
-        // ★最左：三点リーダ（Drawer を開く）
         leading: Builder(
-          // AppBarのleadingは別contextになるのでBuilderでScaffoldを取る
           builder: (ctx) => IconButton(
-            icon: const Icon(Icons.more_vert), // 三点リーダ（縦）
+            icon: const Icon(Icons.more_vert),
             tooltip: 'Menu',
             onPressed: () {
               if (_drawerOpen) {
-                // すでに開いている → 閉じる
                 Navigator.of(context).pop();
               } else {
-                // 閉じている → 開く
                 Scaffold.of(ctx).openDrawer();
               }
             },
           ),
         ),
-
-        // タイトル文字列は不要なので、代わりに「エリア選択」を配置
         title: Transform.translate(
-          // leadingがあるので、少しだけ左寄せにする（必要なら数値調整）
           offset: const Offset(-10, 0),
           child: _HeaderDropdown<String>(
             label: _labelArea(),
             value: _selectedArea,
             items: _areas,
             itemLabel: (v) => v,
-            onChanged: (v) {
-              setState(() => _selectedArea = v);
-            },
+            onChanged: (v) => setState(() => _selectedArea = v),
             width: 160,
           ),
         ),
-
-        // 右端：言語選択
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -247,7 +344,6 @@ class _CalendarPageState extends State<CalendarPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 外枠
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -267,7 +363,6 @@ class _CalendarPageState extends State<CalendarPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 枠上部：年/月ドロップダウン（即移動）
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                         child: Row(
@@ -302,7 +397,6 @@ class _CalendarPageState extends State<CalendarPage> {
                       ),
                       const SizedBox(height: 8),
 
-                      // グリッド枠（6x7 + 曜日行）
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                         child: AspectRatio(
@@ -319,8 +413,6 @@ class _CalendarPageState extends State<CalendarPage> {
                             child: Column(
                               children: [
                                 _WeekdayRow(lang: _lang),
-
-                                // 縦スクロール PageView
                                 Expanded(
                                   child: Listener(
                                     onPointerSignal: _handlePointerSignal,
@@ -366,6 +458,8 @@ class _CalendarPageState extends State<CalendarPage> {
                   selectedDate: _selectedDate,
                   titleBuilder: _selectedInfoTitle,
                   placeholder: _placeholderText(),
+                  example1: selectedExamples.ex1,
+                  example2: selectedExamples.ex2,
                 ),
               ],
             ),
@@ -376,63 +470,107 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 }
 
-/// ★ 左から出る Drawer（メニューバー）
-/// 今は雛形なので、好きなメニュー項目を追加してください。
 class _LeftMenuDrawer extends StatelessWidget {
   final UiLang lang;
   final String selectedArea;
+  final bool notificationEnabled;
+  final ValueChanged<bool> onNotificationChanged;
   final void Function(String key) onTapMenu;
 
   const _LeftMenuDrawer({
     required this.lang,
     required this.selectedArea,
+    required this.notificationEnabled,
+    required this.onNotificationChanged,
     required this.onTapMenu,
   });
-  // サイドバーメニュー項目
+
   @override
   Widget build(BuildContext context) {
-    final item1 = (lang == UiLang.ja) ? 'ホーム画面' : 'Menu home';
-    final item2 = (lang == UiLang.ja) ? 'ゴミ分別辞書' : 'Garbage Sorting Dictionary';
-    final item3 = (lang == UiLang.ja) ? 'ゴミ箱マップ' : 'trash can map';
-    final item4 = (lang == UiLang.ja)
-        ? 'AIカメラ(ゴミ種類)'
-        : 'AI camera (garbage type)';
+    final title = (lang == UiLang.ja) ? ' ' : 'Menu';
+    final areaLabel = (lang == UiLang.ja) ? '選択中エリア' : 'Selected area';
+    final item1 = (lang == UiLang.ja) ? 'ホーム画面' : 'Home';
+    final item2 = (lang == UiLang.ja) ? 'ゴミ分別辞書' : 'Book';
+    final item3 = (lang == UiLang.ja) ? 'ゴミ箱マップ' : 'Map';
+    final item4 = (lang == UiLang.ja) ? 'カメラ' : 'Camera';
+    final item5 = (lang == UiLang.ja) ? '通知' : 'Notifications';
 
     return Drawer(
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 36), // ←ここを増やすと「下がる」
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.home_outlined),
-                title: Text(item1),
-                onTap: () => onTapMenu('item1'),
+        child: Column(
+          children: [
+            SizedBox(
+              height: kToolbarHeight,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: (lang == UiLang.ja) ? '閉じる' : 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.book_outlined),
-                title: Text(item2),
-                onTap: () => onTapMenu('item2'),
+            ),
+            const Divider(height: 1),
+
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.place_outlined),
+                    title: Text('$areaLabel: $selectedArea'),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.home_outlined),
+                    title: Text(item1),
+                    onTap: () => onTapMenu('item1'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.book_outlined),
+                    title: Text(item2),
+                    onTap: () => onTapMenu('item2'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.map_outlined),
+                    title: Text(item3),
+                    onTap: () => onTapMenu('item3'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.camera_alt_outlined),
+                    title: Text(item4),
+                    onTap: () => onTapMenu('item4'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.notifications_outlined),
+                    title: Text(item5),
+                    trailing: Switch(
+                      value: notificationEnabled,
+                      onChanged: onNotificationChanged,
+                    ),
+                    onTap: () => onNotificationChanged(!notificationEnabled),
+                  ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.map_outlined),
-                title: Text(item3),
-                onTap: () => onTapMenu('item3'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: Text(item4),
-                onTap: () => onTapMenu('item4'),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// AppBar内用の小さめドロップダウン
 class _HeaderDropdown<T> extends StatelessWidget {
   final String label;
   final T value;
@@ -456,8 +594,9 @@ class _HeaderDropdown<T> extends StatelessWidget {
       width: width,
       child: DecoratedBox(
         decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE1E5EE)),
           borderRadius: BorderRadius.circular(10),
-          color: Color(0xFFE7EBF3),
+          color: Colors.white,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -489,7 +628,6 @@ class _HeaderDropdown<T> extends StatelessWidget {
   }
 }
 
-/// 枠上部（年/月）用ドロップダウン
 class _LabeledDropdown<T> extends StatelessWidget {
   final String label;
   final T value;
@@ -533,7 +671,6 @@ class _LabeledDropdown<T> extends StatelessWidget {
   }
 }
 
-/// 曜日行（言語で切り替え）
 class _WeekdayRow extends StatelessWidget {
   final UiLang lang;
   const _WeekdayRow({required this.lang});
@@ -576,7 +713,6 @@ class _WeekdayRow extends StatelessWidget {
   }
 }
 
-/// 1か月分の「6×7」日付グリッド（前月/次月も含めて42セル）
 class _MonthGrid extends StatelessWidget {
   final DateTime month;
   final DateTime? selectedDate;
@@ -602,7 +738,6 @@ class _MonthGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cellW = constraints.maxWidth / 7;
         final cellH = constraints.maxHeight / 6;
         final now = DateTime.now();
 
@@ -639,8 +774,7 @@ class _MonthGrid extends StatelessWidget {
                   if (isToday) bg = const Color(0x1A4B7BE5);
                   if (isSelected) bg = const Color(0x264B7BE5);
 
-                  return SizedBox(
-                    width: cellW,
+                  return Expanded(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         border: Border(
@@ -686,16 +820,19 @@ class _MonthGrid extends StatelessWidget {
   }
 }
 
-/// カレンダー下に出す「選択情報」カード
 class _SelectedInfoCard extends StatelessWidget {
   final DateTime? selectedDate;
   final String Function(DateTime) titleBuilder;
   final String placeholder;
+  final String example1;
+  final String example2;
 
   const _SelectedInfoCard({
     required this.selectedDate,
     required this.titleBuilder,
     required this.placeholder,
+    required this.example1,
+    required this.example2,
   });
 
   @override
@@ -726,9 +863,9 @@ class _SelectedInfoCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text('例文1', style: TextStyle(fontSize: 13)),
+                Text(example1, style: const TextStyle(fontSize: 13)),
                 const SizedBox(height: 4),
-                const Text('例文2', style: TextStyle(fontSize: 13)),
+                Text(example2, style: const TextStyle(fontSize: 13)),
               ],
             ),
     );
