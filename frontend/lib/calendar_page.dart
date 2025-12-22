@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'drawer_menu.dart';
@@ -45,6 +46,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _pageController = PageController(
       initialPage: initialIndex.clamp(0, totalMonths - 1),
     );
+
+    // ★JSON読み込み
+    _loadExamplesFromJson();
   }
 
   @override
@@ -254,6 +258,7 @@ class _HeaderDropdown<T> extends StatelessWidget {
       width: width,
       child: DecoratedBox(
         decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE1E5EE)),
           borderRadius: BorderRadius.circular(10),
           color: const Color(0xFFE7EBF3),
         ),
@@ -384,7 +389,6 @@ class _MonthGrid extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cellW = constraints.maxWidth / 7;
         final cellH = constraints.maxHeight / 6;
         return Column(
           children: List.generate(
