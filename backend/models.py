@@ -9,14 +9,35 @@ db = SQLAlchemy()
 class Area(db.Model):
     __tablename__ = 'areas'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    
+    # 7ヶ国語対応
+    name_ja = db.Column(db.String(100), nullable=False)
+    name_en = db.Column(db.String(100))
+    name_zh_cn = db.Column(db.String(100))
+    name_ko = db.Column(db.String(100))
+    name_vi = db.Column(db.String(100))
+    name_ru = db.Column(db.String(100))
+    name_id = db.Column(db.String(100))
+
     calendar_no = db.Column(db.String(10))
+    ward_kanji = db.Column(db.String(50))
+    area_number = db.Column(db.String(10))
+
+    schedules = db.relationship('Schedule', backref='area', lazy=True)
+
     def to_dict(self):
+        # 管理画面用など（デフォルトは日本語）
         return {
             "id": self.id,
-            "name": self.name,
+            "name": self.name_ja,
             "calendar_no": self.calendar_no
         }
+    
+    # ★スマホ用：言語コードを受け取って、その国の言葉で返す
+    def get_localized_name(self, lang_code):
+        # 指定された言語のカラムを探す (例: name_en)
+        target_name = getattr(self, f'name_{lang_code}', None)
+        return target_name if target_name else self.name_ja
 
 # 2. ユーザー管理 (UUID)
 class User(db.Model):
@@ -38,18 +59,31 @@ class User(db.Model):
 class TrashType(db.Model):
     __tablename__ = 'trash_types'
     id = db.Column(db.Integer, primary_key=True)
+    
+    # 7ヶ国語対応
     name_ja = db.Column(db.String(50), nullable=False)
     name_en = db.Column(db.String(50))
-    color_code = db.Column(db.String(7)) # #FF0000
-    icon_name = db.Column(db.String(50)) # fire
+    name_zh_cn = db.Column(db.String(50))
+    name_ko = db.Column(db.String(50))
+    name_vi = db.Column(db.String(50))
+    name_ru = db.Column(db.String(50))
+    name_id = db.Column(db.String(50))
+
+    color_code = db.Column(db.String(7))   # #FF0000 など
+    icon_name = db.Column(db.String(50))   # Flutter側のアイコン名
+
     def to_dict(self):
         return {
             "id": self.id,
-            "name_ja": self.name_ja,
-            "name_en": self.name_en,
-            "color_code": self.color_code,
-            "icon_name": self.icon_name
+            "name": self.name_ja,
+            "color": self.color_code,
+            "icon": self.icon_name
         }
+
+    # ★スマホ用：指定言語の名前を返す
+    def get_localized_name(self, lang_code):
+        target_name = getattr(self, f'name_{lang_code}', None)
+        return target_name if target_name else self.name_ja
 
 # 4. 収集スケジュール
 class Schedule(db.Model):
@@ -61,7 +95,6 @@ class Schedule(db.Model):
 
     # リレーション設定
     trash_type = db.relationship('TrashType', backref='schedules')
-    area = db.relationship('Area', backref='schedules')
     def to_dict(self):
         return {
             "id": self.id,
@@ -74,21 +107,48 @@ class Schedule(db.Model):
 class TrashDictionary(db.Model):
     __tablename__ = 'trash_dictionaries'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False) 
-    note = db.Column(db.Text) 
-    fee = db.Column(db.String(100))
+    
+    # --- 品目名 (7ヶ国語) ---
+    name_ja = db.Column(db.String(255), nullable=False)
+    name_en = db.Column(db.String(255))
+    name_zh_cn = db.Column(db.String(255))
+    name_ko = db.Column(db.String(255))
+    name_vi = db.Column(db.String(255))
+    name_ru = db.Column(db.String(255))
+    name_id = db.Column(db.String(255))
+
+    # --- 備考・出し方 (7ヶ国語) ---
+    note_ja = db.Column(db.Text)
+    note_en = db.Column(db.Text)
+    note_zh_cn = db.Column(db.Text)
+    note_ko = db.Column(db.Text)
+    note_vi = db.Column(db.Text)
+    note_ru = db.Column(db.Text)
+    note_id = db.Column(db.Text)
+
+    fee = db.Column(db.String(100)) # 手数料 (とりあえず共通)
     trash_type_id = db.Column(db.Integer, db.ForeignKey('trash_types.id'), nullable=True)
 
     # リレーション
     trash_type = db.relationship('TrashType', backref='dictionaries')
-    def to_dict(self):
+
+    # ★スマホ用：言語コードを受け取って、その国の言葉で返す魔法のメソッド
+    def get_localized_data(self, lang_code):
+        # 1. 名前と言語の取得
+        target_name = getattr(self, f'name_{lang_code}', None)
+        target_note = getattr(self, f'note_{lang_code}', None)
+
+        # 2. ゴミ種別名も言語変換する
+        type_name = "未分類"
+        if self.trash_type:
+            type_name = self.trash_type.get_localized_name(lang_code)
+
         return {
             "id": self.id,
-            "name": self.name,
-            "note": self.note,
+            "name": target_name if target_name else self.name_ja, # なければ日本語
+            "note": target_note if target_note else self.note_ja,
             "fee": self.fee,
-            # ゴミの種類があればその名前も返す
-            "trash_type_name": self.trash_type.name_ja if self.trash_type else None
+            "trash_type_name": type_name
         }
 
 # 6. ゴミ箱マップ (TrashBin)
