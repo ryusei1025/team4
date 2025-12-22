@@ -1,81 +1,143 @@
-// lib/screens/related_items_screen.dart
-
 import 'package:flutter/material.dart';
+import 'drawer_menu.dart'; // LanguageSelector, LeftMenuDrawer, UiLang を使用
 import 'detail_screen.dart';
 
-// 画面3で表示する決め打ちのデータ
-const List<Map<String, String>> relatedStaticItems = [
-  {'name': '生ゴミ', 'description': '水気をよく切って出す。'},
-  {'name': '衣類', 'description': '資源として回収可能な場合もある。'},
-  {'name': '紙くず', 'description': 'リサイクルできないもの。'},
-];
+class RelatedItemsScreen extends StatefulWidget {
+  final String category;
 
-class RelatedItemsScreen extends StatelessWidget {
-  final String category; // 画面2から受け取った分別カテゴリ
-  const RelatedItemsScreen({required this.category, super.key});
+  const RelatedItemsScreen({super.key, required this.category});
+
+  @override
+  State<RelatedItemsScreen> createState() => _RelatedItemsScreenState();
+}
+
+class _RelatedItemsScreenState extends State<RelatedItemsScreen> {
+  UiLang _lang = UiLang.ja;
+
+  // サンプルデータ
+  final List<Map<String, String>> relatedStaticItems = [
+    {'name': 'ソファー', 'description': 'スプリング入りを含む'},
+    {'name': 'ベッドフレーム', 'description': '木製・金属製'},
+    {'name': '食器棚', 'description': '高さ120cm以上'},
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
+      // 共通メニュー
+      drawer: LeftMenuDrawer(lang: _lang, selectedArea: '中央区'),
       appBar: AppBar(
-        title: const Text('ゴミ分別辞書'),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 8.0),
-            child: Center(
-              child: Text('日本語', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        // 左：メニューボタン
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black),
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
+        ),
+        // 中央：タイトル
+        title: Text(
+          _lang == UiLang.ja ? '関連品目' : 'Related Items',
+          style: const TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        // 右：言語設定ボタン（共通パーツ）
+        actions: [
+          LanguageSelector(
+            currentLang: _lang,
+            onChanged: (v) => setState(() => _lang = v),
           ),
         ],
       ),
-      drawer: const Drawer(),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Divider(height: 1, color: Colors.black26),
+
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
             child: Text(
-              '$category 一覧', // 受け取ったカテゴリ名を表示
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              '${widget.category}の一覧',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
 
-          // 決め打ちの関連品目リスト
+          // 関連品目リスト（枠線ありのデザイン）
           Expanded(
             child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               itemCount: relatedStaticItems.length,
               itemBuilder: (context, index) {
                 final item = relatedStaticItems[index];
-                return ListTile(
-                  title: Text(item['name']!),
-                  subtitle: Text(item['description']!),
-                  onTap: () {
-                    // タップでその品目の詳細画面（画面2）に遷移（再帰的な遷移）
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => DetailScreen(
-                          itemName: item['name']!,
-                          itemCategory: category, // 画面3のカテゴリを引き継ぎ
-                          itemComment: '一覧から選択された項目のコメント', // コメントはプレースホルダー
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black87),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: ListTile(
+                    title: Text(
+                      item['name']!,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(item['description']!),
+                    trailing: const Icon(
+                      Icons.arrow_forward,
+                      size: 20,
+                      color: Colors.black,
+                    ),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => DetailScreen(
+                            itemName: item['name']!,
+                            itemCategory: widget.category,
+                            itemComment: '関連リストから選択されました。',
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 );
               },
             ),
           ),
 
-          // 戻るボタン
+          // 画像のデザインを再現した左下の「戻る」ボタン
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: TextButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('戻る'),
+            padding: const EdgeInsets.only(left: 20.0, bottom: 40.0, top: 20.0),
+            child: InkWell(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD9DEE2), // 指定のグレー背景
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.arrow_back, size: 18, color: Colors.black),
+                    const SizedBox(width: 4),
+                    Text(
+                      _lang == UiLang.ja ? '戻る' : 'Back',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
