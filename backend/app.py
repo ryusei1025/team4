@@ -61,15 +61,23 @@ def search_trash_dictionary():
     keyword = request.args.get('q')
     try:
         if keyword:
-            # 名前 または 備考(note) で検索できるように改良
             results = TrashDictionary.query.filter(
                 (TrashDictionary.name.contains(keyword)) | 
                 (TrashDictionary.note.contains(keyword))
             ).all()
         else:
             results = TrashDictionary.query.all()
-        return jsonify([item.to_dict() for item in results])
+        
+        # to_dict() を使わずに、ここで直接辞書を作る（確実な方法）
+        return jsonify([{
+            "id": item.id,
+            "name": item.name,
+            "note": item.note,
+            "trash_type_name": "燃えるゴミ"  # ★ここが Flutter側で必要です
+        } for item in results])
+
     except Exception as e:
+        print(f"Error: {e}") # ターミナルにエラー内容を表示
         return jsonify({"error": str(e)}), 500
 
 # (4) ゴミ箱マップ API (★以前の機能を復元・改良しました)
@@ -156,6 +164,31 @@ def analyze_image():
     except Exception as e:
         print(f"Gemini Error: {e}")
         return jsonify({"error": "Analysis failed", "details": str(e)}), 500
+@app.route('/api/getdictionary', methods=['GET'])
+def getdictionary():
+    try:
+        # 1. TrashDictionary と TrashType を ID で紐付けて一緒に取得する
+        items = db.session.query(TrashDictionary, TrashType).join(
+            TrashType, TrashDictionary.trash_type_id == TrashType.id
+        ).all()
+        
+        # 2. データをリスト形式に変換
+        results = []
+        for dictionary, t_type in items:
+            results.append({
+                'id': dictionary.id,
+                'name': dictionary.name, # ゴミの名前（例：ランドセル）
+                'note': dictionary.note,
+                'fee': dictionary.fee,
+                # 2. ここで Flutter が探している 'trash_type_name' を入れる
+                'trash_type_name': t_type.name # ゴミの種類（例：燃やせるごみ）
+            })
+        
+        # 3. JSONとしてレスポンスを返す
+        return jsonify(results)
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
