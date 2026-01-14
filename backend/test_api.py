@@ -2,10 +2,10 @@ import requests
 import json
 
 # 1. テストしたいAPIのURL
-url = "http://127.0.0.1:5000/api/analyze_image"
+url = "http://127.0.0.1:5000/api/analyze_trash"
 
 # 2. テストする画像ファイル名
-image_file = "test_img/test5.jpg"
+image_file = "test_img/test3.jpg"
 
 print(f"--- テスト開始: {image_file} を送信します ---")
 
