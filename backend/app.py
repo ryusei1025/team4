@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 import os
@@ -234,6 +234,12 @@ def analyze_trash():
         print(f"AI診断エラー: {e}")
         return jsonify({"error": f"AI診断に失敗しました: {str(e)}"}), 500
 
+# --- 追加ここから ---
+@app.route('/')
+def index():
+    # さっき作った upload.html を表示する
+    return render_template('upload.html')
+# --- 追加ここまで ---
 
 # ------------------------------------------------------------------
 # 3. サーバーの起動
