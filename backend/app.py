@@ -44,9 +44,9 @@ if GEMINI_API_KEY:
 
 # トップページアクセス確認用
 # URL: http://localhost:5000/
-@app.route('/')
-def index():
-    return jsonify({"message": "Banana App API Server is running! (バナナアプリサーバー稼働中)"})
+#@app.route('/')
+#def index():
+#    return jsonify({"message": "Banana App API Server is running! (バナナアプリサーバー稼働中)"})
 
 
 # =========================================================
@@ -236,7 +236,7 @@ def analyze_trash():
 
 # --- 追加ここから ---
 @app.route('/')
-def index():
+def camera_page():
     # さっき作った upload.html を表示する
     return render_template('upload.html')
 # --- 追加ここまで ---
