@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 import os
@@ -202,7 +202,7 @@ def analyze_trash():
         img = Image.open(file.stream)
 
         # 4. Geminiモデルの準備 (高速な flash モデルを使用)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
 
         # 5. AIへの命令文 (プロンプト)
         # ここを変えるとAIのキャラや回答形式が変わります
@@ -234,6 +234,12 @@ def analyze_trash():
         print(f"AI診断エラー: {e}")
         return jsonify({"error": f"AI診断に失敗しました: {str(e)}"}), 500
 
+# --- 追加ここから ---
+@app.route('/')
+def index():
+    # さっき作った upload.html を表示する
+    return render_template('upload.html')
+# --- 追加ここまで ---
 
 # ------------------------------------------------------------------
 # 3. サーバーの起動
@@ -243,4 +249,4 @@ if __name__ == '__main__':
     import json
     
     # デバッグモードONでサーバーを起動 (コードを変えると自動で再起動してくれます)
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
