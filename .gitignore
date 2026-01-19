@@ -7,3 +7,7 @@ backend/__pycache__/
 frontend/build/
 frontend/.dart_tool/
 .DS_Store
+
+# サーバーのログと秘密鍵
+gunicorn_log.txt
+.env

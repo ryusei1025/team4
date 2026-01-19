@@ -42,10 +42,10 @@ if GEMINI_API_KEY:
 # ------------------------------------------------------------------
 
 # トップページアクセス確認用
-# URL: http://localhost:5000/
-#@app.route('/')
-#def index():
-#    return jsonify({"message": "Banana App API Server is running! (バナナアプリサーバー稼働中)"})
+# URL: 'https://50.17.227.109.nip.io'
+@app.route('/')
+def index():
+    return jsonify({"message": "Banana App API Server is running! (バナナアプリサーバー稼働中)"})
 
 
 # --- 機能A: 地域エリア一覧を取得 ---
@@ -196,8 +196,8 @@ def analyze_trash():
     except Exception as e:
         return jsonify({"error": f"AI診断失敗: {str(e)}"}), 500
 
-# --- 追加ここから ---
-@app.route('/')
+# --- geminiテスト用 ---
+@app.route('/api/gemini_test', methods=['POST'])
 def camera_page():
     # さっき作った upload.html を表示する
     return render_template('upload.html')
