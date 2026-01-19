@@ -1,4 +1,4 @@
-import 'dart:convert';
+// import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'drawer_menu.dart';
@@ -48,7 +48,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
 
     // ★JSON読み込み
-    _loadExamplesFromJson();
+    // _loadExamplesFromJson();
   }
 
   @override
@@ -390,6 +390,7 @@ class _MonthGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cellH = constraints.maxHeight / 6;
+        final cellW = constraints.maxWidth / 7;
         return Column(
           children: List.generate(
             6,

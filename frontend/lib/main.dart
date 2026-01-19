@@ -24,19 +24,64 @@ class MyApp extends StatelessWidget {
       title: 'ごみ分別アプリ',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.white, // 基準の色を白に
+          surface: Colors.green, // メニューやダイアログを含む全体の背景を緑に
+        ),
         useMaterial3: true,
       ),
       initialRoute: '/',
       routes: {
         '/': (context) => const CalendarScreen(),
         '/search': (context) => const SearchScreen(),
-        '/camera': (context) => const CameraScreen(), // ★コメントアウトを外す
+        '/camera': (context) => const CameraScreen(), 
       },
     );
   }
 }
 
+// main.dart の一番下に追加
+Widget buildCommonDrawer(BuildContext context) {
+  return Drawer(
+    backgroundColor: Colors.white, // 下のリスト部分は白
+    child: Column(
+      children: [
+        // ★ ここが青い部分（ヘッダー）の設定です
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 50, horizontal: 20),
+          decoration: const BoxDecoration(
+            color: Colors.red, // ← ここを好きな色（Colors.green など）に変えてください！
+          ),
+          child: const Text(
+            'メニュー',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        // 下のメニュー項目
+        ListTile(
+          leading: const Icon(Icons.calendar_today),
+          title: const Text('ホーム(カレンダー)'),
+          onTap: () => Navigator.pushReplacementNamed(context, '/'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.search),
+          title: const Text('ゴミ分別辞書'),
+          onTap: () => Navigator.pushNamed(context, '/search'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.camera_alt),
+          title: const Text('AIカメラ判定'),
+          onTap: () => Navigator.pushNamed(context, '/camera'),
+        ),
+      ],
+    ),
+  );
+}
 // class TestScreen extends StatefulWidget {
 //   const TestScreen({super.key});
 
