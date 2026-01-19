@@ -130,7 +130,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
               padding: EdgeInsets.zero,
               children: [
                 DrawerHeader(
-                  decoration: const BoxDecoration(color: Color(0xFF4B7BE5)),
+                  decoration: const BoxDecoration(
+                    color: Color.fromARGB(255, 123, 226, 132),
+                  ),
                   child: Text(
                     widget.lang == UiLang.ja ? 'メニュー' : 'Menu',
                     style: const TextStyle(color: Colors.white, fontSize: 24),
@@ -150,6 +152,14 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   ),
                   onTap: () =>
                       Navigator.pushReplacementNamed(context, '/search'),
+                ),
+                // 追加：ゴミ箱マップ
+                ListTile(
+                  leading: const Icon(Icons.map_outlined),
+                  title: Text(
+                    widget.lang == UiLang.ja ? 'ゴミ箱マップ' : 'Trash Bin Map',
+                  ),
+                  onTap: () => Navigator.pushReplacementNamed(context, '/map'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.camera_alt),

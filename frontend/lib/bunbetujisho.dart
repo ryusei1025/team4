@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:async'; // タイマー用に追加
 import 'package:http/http.dart' as http;
 import 'drawer_menu.dart';
 import 'category_items_screen.dart';
@@ -18,6 +19,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<dynamic> _trashItems = [];
   bool _isLoading = false;
   String _errorMessage = '';
+  Timer? _debounce; // 通信安定化用のタイマー
 
   final String _baseUrl = 'http://10.0.2.2:5000';
 
@@ -25,7 +27,6 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     _fetchTrashData(query: '');
-    // 画面表示時に検索窓にフォーカスを当てる
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });
@@ -33,12 +34,13 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel(); // タイマーの破棄
     _focusNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  // IDから名前を判定
+  // IDから名前を判定（ご提示の7カテゴリ版）
   String _getTrashTypeName(dynamic item) {
     final id = int.tryParse(item['trash_type_id']?.toString() ?? '') ?? 0;
     final String fallbackName =
@@ -64,7 +66,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // IDから色を判定
+  // IDから色を判定（ご提示のカラー設定版）
   Color _getTrashColor(dynamic item) {
     final id = int.tryParse(item['trash_type_id']?.toString() ?? '') ?? 0;
     switch (id) {
@@ -87,7 +89,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // 詳細モーダル表示
+  // 詳細モーダル表示（ご提示の多機能版）
   void _showDetail(dynamic item) {
     final Color themeColor = _getTrashColor(item);
     final String typeName = _getTrashTypeName(item);
@@ -97,6 +99,7 @@ class _SearchScreenState extends State<SearchScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -126,14 +129,11 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-
               const Text(
                 'ゴミの種類（タップで一覧を表示）',
                 style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 8),
-
-              // ★ カテゴリー一覧へのボタン
               Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -142,18 +142,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     final int tid =
                         int.tryParse(item['trash_type_id']?.toString() ?? '') ??
                         0;
-
-                    if (tid == 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('カテゴリーIDが見つかりません')),
-                      );
-                      return;
-                    }
-
-                    // 1. モーダルを閉じる
+                    if (tid == 0) return;
                     Navigator.of(context).pop();
-
-                    // 2. 確実に次の画面を開く（少し遅延させて安定させる）
                     Future.delayed(const Duration(milliseconds: 150), () {
                       if (!mounted) return;
                       Navigator.push(
@@ -199,7 +189,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               ),
-
               const Divider(height: 40),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -253,6 +242,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  // 通信処理
   Future<void> _fetchTrashData({String query = ''}) async {
     if (!mounted) return;
     setState(() {
@@ -272,11 +262,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        if (mounted)
+        if (mounted) {
           setState(() {
             _trashItems = data;
             _isLoading = false;
           });
+        }
       } else {
         if (mounted)
           setState(() {
@@ -296,19 +287,13 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      // DrawerとAppBarは統一デザインを維持
       drawer: LeftMenuDrawer(lang: _lang, selectedArea: '札幌市'),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         title: Text(
           _lang == UiLang.ja ? '分別辞書検索' : 'Trash Search',
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(
             icon: const Icon(Icons.language),
@@ -321,73 +306,111 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              decoration: InputDecoration(
-                hintText: _lang == UiLang.ja ? 'ゴミの名前で検索...' : 'Search...',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.grey.shade200,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              onChanged: (text) => _fetchTrashData(query: text),
-            ),
+      body: Container(
+        // ★ 斜めグラデーション背景
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [
+              Color(0xFFE8F5E9), // 薄い緑
+              Color(0xFFC8E6C9), // 少し強めの緑
+            ],
           ),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _errorMessage.isNotEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _errorMessage,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              _fetchTrashData(query: _searchController.text),
-                          child: const Text('再試行'),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _trashItems.length,
-                    itemBuilder: (context, index) {
-                      final item = _trashItems[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        child: ListTile(
-                          onTap: () => _showDetail(item),
-                          title: Text(
-                            item['name'] ?? '',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        child: Column(
+          children: [
+            // 検索バー
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _searchController,
+                focusNode: _focusNode,
+                decoration: InputDecoration(
+                  hintText: _lang == UiLang.ja ? 'ゴミの名前で検索...' : 'Search...',
+                  prefixIcon: const Icon(Icons.search, color: Colors.green),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.85),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 0,
+                    horizontal: 16,
+                  ),
+                ),
+                // 文字入力のたびに少し待ってから検索（デバウンス）
+                onChanged: (text) {
+                  if (_debounce?.isActive ?? false) _debounce!.cancel();
+                  _debounce = Timer(const Duration(milliseconds: 500), () {
+                    _fetchTrashData(query: text);
+                  });
+                },
+              ),
+            ),
+            // 結果リスト
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Colors.green),
+                    )
+                  : _errorMessage.isNotEmpty
+                  ? _buildErrorWidget()
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      itemCount: _trashItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _trashItems[index];
+                        return Card(
+                          color: Colors.white.withOpacity(0.8),
+                          elevation: 0.5,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
                           ),
-                          subtitle: Text(
-                            _getTrashTypeName(item),
-                            style: TextStyle(
-                              color: _getTrashColor(item),
-                              fontWeight: FontWeight.bold,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            onTap: () => _showDetail(item),
+                            title: Text(
+                              item['name'] ?? '',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              _getTrashTypeName(item),
+                              style: TextStyle(
+                                color: _getTrashColor(item),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            trailing: const Icon(
+                              Icons.chevron_right,
+                              color: Colors.green,
                             ),
                           ),
-                          trailing: const Icon(Icons.chevron_right),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(_errorMessage, style: const TextStyle(color: Colors.red)),
+          TextButton(
+            onPressed: () => _fetchTrashData(query: _searchController.text),
+            child: const Text('再試行'),
           ),
         ],
       ),
