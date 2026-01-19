@@ -2,19 +2,23 @@ import 'package:flutter/material.dart';
 import 'notification_service.dart';
 import 'calendar_page.dart';
 import 'bunbetujisho.dart';
-import 'camera_screen.dart'; // ★コメントアウトを外す
+import 'camera_screen.dart';
+import 'map_screen.dart'; // ★追加
 
 void main() async {
+  // Flutterの初期化待ち
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 通知サービスの初期化（元のコードを保持）
   try {
     await NotificationService.init();
   } catch (e) {
     debugPrint('通知初期化エラー: $e');
   }
+
   runApp(const MyApp());
 }
 
-/// アプリのルート。
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -24,59 +28,70 @@ class MyApp extends StatelessWidget {
       title: 'ごみ分別アプリ',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        // 元のTheme設定を活かしつつ、アプリ全体のトーンを少し緑に寄せています
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.white, // 基準の色を白に
-          surface: Colors.green, // メニューやダイアログを含む全体の背景を緑に
+          seedColor: Colors.green, // 基準色を緑に
+          surface: Colors.white, // 全体の背景を白に
         ),
         useMaterial3: true,
+        // AppBarのデザイン統一
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: Colors.black,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
       initialRoute: '/',
       routes: {
         '/': (context) => const CalendarScreen(),
         '/search': (context) => const SearchScreen(),
-        '/camera': (context) => const CameraScreen(), 
+        '/camera': (context) => const CameraScreen(),
+        '/map': (context) => const TrashBinMapScreen(), // ★マップ画面のルートを追加
       },
     );
   }
 }
 
-// main.dart の一番下に追加
+// --- 元々のコードにあった共通Drawerヘルパーも保持 ---
+// ※各画面で独自に LeftMenuDrawer を呼んでいる場合は使いませんが、
+//   コードとして残しておくことで既存の依存関係を壊さないようにします。
 Widget buildCommonDrawer(BuildContext context) {
   return Drawer(
-    backgroundColor: Colors.white, // 下のリスト部分は白
-    child: Column(
+    backgroundColor: Colors.white,
+    child: ListView(
+      padding: EdgeInsets.zero,
       children: [
-        // ★ ここが青い部分（ヘッダー）の設定です
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 50, horizontal: 20),
-          decoration: const BoxDecoration(
-            color: Colors.red, // ← ここを好きな色（Colors.green など）に変えてください！
-          ),
-          child: const Text(
+        const DrawerHeader(
+          decoration: BoxDecoration(color: Colors.green),
+          child: Text(
             'メニュー',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 24),
           ),
         ),
-        // 下のメニュー項目
         ListTile(
           leading: const Icon(Icons.calendar_today),
-          title: const Text('ホーム(カレンダー)'),
+          title: const Text('ごみ収集カレンダー'),
           onTap: () => Navigator.pushReplacementNamed(context, '/'),
         ),
         ListTile(
           leading: const Icon(Icons.search),
-          title: const Text('ゴミ分別辞書'),
-          onTap: () => Navigator.pushNamed(context, '/search'),
+          title: const Text('分別辞書'),
+          onTap: () => Navigator.pushReplacementNamed(context, '/search'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.map),
+          title: const Text('ゴミ箱マップ'),
+          onTap: () => Navigator.pushReplacementNamed(context, '/map'),
         ),
         ListTile(
           leading: const Icon(Icons.camera_alt),
           title: const Text('AIカメラ判定'),
-          onTap: () => Navigator.pushNamed(context, '/camera'),
+          onTap: () => Navigator.pushReplacementNamed(context, '/camera'),
         ),
       ],
     ),
