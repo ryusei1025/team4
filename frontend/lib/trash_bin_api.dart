@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'constants.dart';
 
 class TrashBin {
   final int id;
@@ -28,7 +29,7 @@ class TrashBin {
 }
 
 class TrashBinApi {
-  static const baseUrl = 'http://10.0.2.2:5000';
+  static const baseUrl = AppConstants.baseUrl;
 
   static Future<List<TrashBin>> fetchBins() async {
     final res = await http.get(Uri.parse('$baseUrl/api/bins'));

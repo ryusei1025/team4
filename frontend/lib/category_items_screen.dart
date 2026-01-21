@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'constants.dart';
 
 class CategoryItemsScreen extends StatefulWidget {
   final int trashTypeId;
@@ -22,7 +23,8 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
   List<dynamic> _items = [];
   bool _isLoading = true;
   String _errorMessage = '';
-  final String _baseUrl = 'http://10.0.2.2:5000';
+  // final String _baseUrl = 'http://10.0.2.2:5000';
+  final String _baseUrl = AppConstants.baseUrl;
 
   @override
   void initState() {

@@ -4,6 +4,7 @@ import 'dart:async'; // タイマー用に追加
 import 'package:http/http.dart' as http;
 import 'drawer_menu.dart';
 import 'category_items_screen.dart';
+import 'constants.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -21,7 +22,8 @@ class _SearchScreenState extends State<SearchScreen> {
   String _errorMessage = '';
   Timer? _debounce; // 通信安定化用のタイマー
 
-  final String _baseUrl = 'http://10.0.2.2:5000';
+  // final String _baseUrl = 'http://10.0.2.2:5000';
+  final String _baseUrl = AppConstants.baseUrl;
 
   @override
   void initState() {
