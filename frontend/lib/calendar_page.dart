@@ -1,6 +1,6 @@
 // import 'dart:convert'; // JSON変換などに使うが、今回は未使用なのでコメントアウト（将来JSON読み込みするなら復活）
 
-import 'package:flutter/gestures.dart'; // RichTextのリンク風タップ等（TapGestureRecognizer）やホイール入力を扱うため
+import 'package:flutter/gestures.dart'; // マウスホイール（PointerScrollEvent）などの入力を扱うため
 import 'package:flutter/material.dart'; // Material UI（Scaffold/AppBar/Iconなど）を使うため
 import 'drawer_menu.dart'; // LeftMenuDrawer / LanguageSelector / UiLang など（プロジェクト側定義）を使うため
 
@@ -18,8 +18,18 @@ enum GarbageType {
   bulky, // 粗大ごみ（例）
 } // enum終わり
 
-/// ★おすすめ修正：月日（Month-Day）を int キーにする（const Set<int> に入れられる）
-/// 例：1/3 → 103、12/31 → 1231
+/// ★追加：表示順（複数のゴミが被った時の並び順にも使う） // UIの見やすさを安定させる
+const List<GarbageType> garbageTypeDisplayOrder = <GarbageType>[
+  GarbageType.burnable, // 燃える
+  GarbageType.recyclable, // 資源
+  GarbageType.plastic, // プラ
+  GarbageType.nonBurnable, // 不燃
+  GarbageType.bulky, // 粗大
+  GarbageType.none, // 収集なし（最後）
+]; // 表示順終わり
+
+/// ★おすすめ修正：月日（Month-Day）を int キーにする（const Set<int> に入れられる） // const Setで独自クラスが使えない問題の回避
+/// 例：1/3 → 103、12/31 → 1231 // 変換例
 int mdKey(DateTime date) =>
     date.month * 100 + date.day; // DateTime→「月*100+日」の整数キーへ変換
 
@@ -30,6 +40,7 @@ class GarbageRule {
   final GarbageType type; // このルールのゴミ種別
 
   const GarbageRule({
+    // constで定義できるようにconstコンストラクタ
     required this.weeks, // 対象週
     required this.weekday0to6, // 対象曜日
     required this.type, // ゴミ種別
@@ -49,38 +60,21 @@ class GarbageRule {
 int weekdayIndex0to6(DateTime date) =>
     date.weekday % 7; // DateTime.weekday(月=1..日=7)を日=0..土=6へ変換
 
-// ===========================
-// ★追加：表示用に「種別の並び順」を固定する（重複除去＋順序安定化）
-// - 同じ日に複数収集が被った場合、アイコン/色の並びが毎回同じになるようにする
-// ===========================
-
-List<GarbageType> normalizeTypes(Iterable<GarbageType> types) {
-  // 重複を除去し、一定の順番で返す（noneは除外）
-  const order = <GarbageType>[
-    GarbageType.burnable, // 1) 燃える
-    GarbageType.recyclable, // 2) 資源
-    GarbageType.plastic, // 3) プラ
-    GarbageType.nonBurnable, // 4) 不燃
-    GarbageType.bulky, // 5) 粗大
-  ]; // 表示順
-  final set = <GarbageType>{...types}..remove(GarbageType.none); // 重複除去＆noneを除外
-  return order.where(set.contains).toList(); // orderに沿って並べ替え
-} // normalizeTypes終わり
-
 Color garbageColor(GarbageType type) {
   // ゴミ種別→セル背景色を返す
   switch (type) {
-    case GarbageType.burnable:
+    // 種別で分岐
+    case GarbageType.burnable: // 燃えるゴミ
       return Colors.orange.withOpacity(0.18); // 薄いオレンジ
-    case GarbageType.recyclable:
+    case GarbageType.recyclable: // 資源ゴミ
       return Colors.blue.withOpacity(0.16); // 薄い青
-    case GarbageType.plastic:
+    case GarbageType.plastic: // プラ
       return Colors.green.withOpacity(0.16); // 薄い緑
-    case GarbageType.nonBurnable:
+    case GarbageType.nonBurnable: // 不燃
       return Colors.purple.withOpacity(0.16); // 薄い紫
-    case GarbageType.bulky:
+    case GarbageType.bulky: // 粗大
       return Colors.brown.withOpacity(0.16); // 薄い茶
-    case GarbageType.none:
+    case GarbageType.none: // 収集なし
       return Colors.transparent; // 透明（色を表示しない）
   } // switch終わり
 } // garbageColor終わり
@@ -88,7 +82,9 @@ Color garbageColor(GarbageType type) {
 String garbageLabel(GarbageType type, UiLang lang) {
   // ゴミ種別→表示ラベル（日本語/英語）を返す
   if (lang == UiLang.ja) {
+    // 日本語UIなら
     switch (type) {
+      // 種別で分岐（日本語）
       case GarbageType.burnable:
         return '燃えるゴミ';
       case GarbageType.recyclable:
@@ -103,7 +99,9 @@ String garbageLabel(GarbageType type, UiLang lang) {
         return '収集なし';
     } // switch終わり
   } else {
+    // 英語UIなら
     switch (type) {
+      // 種別で分岐（英語）
       case GarbageType.burnable:
         return 'Burnable';
       case GarbageType.recyclable:
@@ -131,6 +129,7 @@ String weekLabel(int week, UiLang lang) {
   // 第N週の表示ラベルを作る
   if (lang == UiLang.ja) return '第$week'; // 日本語なら「第N」
   switch (week) {
+    // 英語なら序数っぽい表記
     case 1:
       return '1st';
     case 2:
@@ -145,6 +144,7 @@ String weekLabel(int week, UiLang lang) {
 IconData garbageIcon(GarbageType type) {
   // ゴミ種別→アイコン（セルの日付下に表示）
   switch (type) {
+    // 種別で分岐
     case GarbageType.burnable:
       return Icons.local_fire_department; // 燃える：炎
     case GarbageType.recyclable:
@@ -163,6 +163,7 @@ IconData garbageIcon(GarbageType type) {
 Color garbageIconColor(GarbageType type) {
   // ゴミ種別→アイコン色（背景より濃く）
   switch (type) {
+    // 種別で分岐
     case GarbageType.burnable:
       return Colors.deepOrange; // 燃える：濃オレンジ
     case GarbageType.recyclable:
@@ -186,7 +187,7 @@ class CalendarScreen extends StatefulWidget {
   // 状態を持つ画面（選択日・表示月など）
   const CalendarScreen({super.key}); // keyを受け取るコンストラクタ
 
-  @override
+  @override // Stateを返すメソッドをオーバーライド
   State<CalendarScreen> createState() => _CalendarScreenState(); // このWidgetのStateを生成
 } // CalendarScreen終わり
 
@@ -210,19 +211,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   bool _showGuide = false; // 「詳細情報」パネルの表示/非表示フラグ
 
-  // ===========================
-  // ★追加：土日収集を無効化する（重要なお知らせの「土日は収集しません」に合わせる）
-  // ※もし将来「土曜も収集する区」が出たら false に変更する
-  // ===========================
-
-  static const bool _disableWeekendCollection = true; // trueなら土日(0,6)は常に収集なしにする
-
   // =========================== // セクション区切り
   // エリアごとの「週×曜日」収集ルール表（ここを書き換えると収集日を変更できる） // 設定の中心
   // =========================== // セクション区切り
 
   late final Map<String, List<GarbageRule>> _areaRules = {
+    // エリア名→ルール一覧
     '中央区': const [
+      // 中央区のルール
       GarbageRule(
         weeks: {1, 2, 3, 4, 5},
         weekday0to6: 1,
@@ -242,9 +238,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         weeks: {1, 3},
         weekday0to6: 6,
         type: GarbageType.recyclable,
-      ), // 第1・第3土：資源（※土日無効なら表示/判定で除外）
+      ), // 第1・第3土：資源
     ], // 中央区終わり
     '東区': const [
+      // 東区のルール
       GarbageRule(
         weeks: {1, 2, 3, 4, 5},
         weekday0to6: 2,
@@ -264,9 +261,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         weeks: {2, 4},
         weekday0to6: 6,
         type: GarbageType.recyclable,
-      ), // 第2・第4土：資源（※土日無効なら表示/判定で除外）
+      ), // 第2・第4土：資源
     ], // 東区終わり
     '北区': const [
+      // 北区のルール
       GarbageRule(
         weeks: {1, 2, 3, 4, 5},
         weekday0to6: 1,
@@ -291,7 +289,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         weeks: {4},
         weekday0to6: 6,
         type: GarbageType.nonBurnable,
-      ), // 第4土：不燃（※土日無効なら表示/判定で除外）
+      ), // 第4土：不燃
     ], // 北区終わり
   }; // _areaRules終わり
 
@@ -300,88 +298,70 @@ class _CalendarScreenState extends State<CalendarScreen> {
   // =========================== // セクション区切り
 
   static const Set<int> _noCollectionFixedDays = {
+    // mdKey（月*100+日）で保持
     101, // 1/1：年始で収集なし
     102, // 1/2：年始で収集なし
     103, // 1/3：年始で収集なし
   }; // 固定除外日終わり
 
-  // ===========================
-  // ★追加：[重要なお知らせ]（区ごとに変えられるようMap化）
-  // ===========================
+  // =========================== // セクション区切り
+  // ★追加：重要なお知らせ（区ごとに差し替え可能） // 赤カードで表示
+  // =========================== // セクション区切り
 
-  final Map<String, List<String>> _importantNoticeByArea = {
-    '中央区': const [
-      '・ごみは収集日の朝8時30分までに出してください',
-      '・指定袋以外での排出は収集されません',
-      '・年末年始は収集日程が変更になります',
-      '・台風等の悪天候時は収集を中止する場合があります',
-      '・土日はごみ収集を行いません',
-    ],
-    '東区': const [
-      '・ごみは収集日の朝8時30分までに出してください',
-      '・指定袋以外での排出は収集されません',
-      '・年末年始は収集日程が変更になります',
-      '・台風等の悪天候時は収集を中止する場合があります',
-      '・土日はごみ収集を行いません',
-    ],
-    '北区': const [
-      '・ごみは収集日の朝8時30分までに出してください',
-      '・指定袋以外での排出は収集されません',
-      '・年末年始は収集日程が変更になります',
-      '・台風等の悪天候時は収集を中止する場合があります',
-      '・土日はごみ収集を行いません',
-    ],
+  late final List<String> _commonImportantNotice = <String>[
+    'ごみは収集日の朝8時30分までに出してください', // 重要：時間厳守
+    '指定袋以外での排出は収集されません', // 重要：指定袋
+    '年末年始は収集日程が変更になります', // 重要：年末年始
+    '台風等の悪天候時は収集を中止する場合があります', // 重要：悪天候
+    '土日はごみ収集を行いません', // 重要：土日休み（※ルール設定と矛盾しないよう運用側で調整）
+  ]; // 共通のお知らせ終わり
+
+  late final Map<String, List<String>> _importantNoticeByArea = {
+    // 区名→重要なお知らせ（区ごとに内容を変えたい場合はここを編集）
+    '中央区': _commonImportantNotice, // 中央区（今は共通）
+    '東区': _commonImportantNotice, // 東区（今は共通）
+    '北区': _commonImportantNotice, // 北区（今は共通）
   }; // _importantNoticeByArea終わり
 
-  // ===========================
-  // ★追加：[お問い合わせ]（区ごとに変えられるようデータ化）
-  // ===========================
+  // =========================== // セクション区切り
+  // ★追加：お問い合わせ（区ごとに差し替え可能） // 青カードで表示
+  // =========================== // セクション区切り
 
-  final Map<String, _InquiryInfo> _inquiryByArea = {
-    '中央区': const _InquiryInfo(
-      centerName: '札幌市コールセンター',
-      phone: '011-222-4894',
-      hoursWeekday: '平日 8:00〜21:00',
-      hoursHoliday: '土日祝 : 9:00〜17:00',
-      websiteLabel: '札幌市公式ウェブサイト',
-      websiteUrlText: 'URL',
-    ),
-    '東区': const _InquiryInfo(
-      centerName: '札幌市コールセンター',
-      phone: '011-222-4894',
-      hoursWeekday: '平日 8:00〜21:00',
-      hoursHoliday: '土日祝 : 9:00〜17:00',
-      websiteLabel: '札幌市公式ウェブサイト',
-      websiteUrlText: 'URL',
-    ),
-    '北区': const _InquiryInfo(
-      centerName: '札幌市コールセンター',
-      phone: '011-222-4894',
-      hoursWeekday: '平日 8:00〜21:00',
-      hoursHoliday: '土日祝 : 9:00〜17:00',
-      websiteLabel: '札幌市公式ウェブサイト',
-      websiteUrlText: 'URL',
-    ),
+  late final List<String> _commonInquiry = <String>[
+    '札幌市コールセンター : [011-222-4894]', // 電話番号（[]内をグレー表示）
+    '受付時間 : [平日 8:00〜21:00]', // 平日受付（[]内をグレー表示）
+    '土日祝 : [9:00〜17:00]', // 土日祝受付（[]内をグレー表示）
+    '札幌市公式ウェブサイト : [URL]', // 公式サイト（[]内をグレー表示）
+  ]; // 共通のお問い合わせ終わり
+
+  late final Map<String, List<String>> _inquiryByArea = {
+    // 区名→お問い合わせ（区ごとに内容を変えたい場合はここを編集）
+    '中央区': _commonInquiry, // 中央区（今は共通）
+    '東区': _commonInquiry, // 東区（今は共通）
+    '北区': _commonInquiry, // 北区（今は共通）
   }; // _inquiryByArea終わり
 
-  // ===========================
-  // ★追加：祝日の収集ポリシー（区ごとに設定できる） // 収集スケジュール表示用
-  // ===========================
+  // =========================== // セクション区切り
+  // ★追加：祝日は収集するか（区ごとに設定できる） // 収集スケジュールカードで表示
+  // =========================== // セクション区切り
 
-  final Map<String, HolidayPolicy> _holidayPolicyByArea = {
-    '中央区': HolidayPolicy.collect, // 祝日も収集あり（例）
-    '東区': HolidayPolicy.collect, // 祝日も収集あり（例）
-    '北区': HolidayPolicy.collect, // 祝日も収集あり（例）
-  }; // _holidayPolicyByArea終わり
+  late final Map<String, bool> _collectOnHolidaysByArea = {
+    // 区名→祝日の収集有無（必要に応じて区ごとに変更）
+    '中央区': true, // 中央区：祝日も収集する想定（例）
+    '東区': true, // 東区：祝日も収集する想定（例）
+    '北区': true, // 北区：祝日も収集する想定（例）
+  }; // _collectOnHolidaysByArea終わり
 
-  @override
+  @override // initStateをオーバーライド
   void initState() {
-    super.initState(); // 親クラス初期化
+    // 最初の1回だけ呼ばれる初期化
+    super.initState(); // 親クラスの初期化
 
-    final now = DateTime.now(); // 現在日時
-    final initial = (now.year < baseYear)
-        ? DateTime(baseYear, 1, 1)
-        : DateTime(now.year, now.month, 1); // 初期表示月
+    final now = DateTime.now(); // 現在日時（初期表示を決めるため）
+    final initial =
+        (now.year < baseYear) // baseYearより前なら
+        ? DateTime(baseYear, 1, 1) // 2026/1を初期表示
+        : DateTime(now.year, now.month, 1); // それ以外は今月を初期表示（1日固定）
 
     _visibleYear = initial.year; // 表示中年の初期値
     _visibleMonth = initial.month; // 表示中月の初期値
@@ -389,23 +369,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _pickedMonth = _visibleMonth; // ドロップダウン月を同期
 
     final initialIndex = _monthIndexFrom(
-      baseMonth,
-      DateTime(_visibleYear, _visibleMonth, 1),
-    ); // 初期月をページIndexに変換
+      // 初期月をページIndexに変換
+      baseMonth, // 基準月（2026/1）
+      DateTime(_visibleYear, _visibleMonth, 1), // 初期表示月
+    ); // 変換終わり
+
     _pageController = PageController(
-      initialPage: initialIndex.clamp(0, totalMonths - 1),
-    ); // PageView用コントローラ
+      // PageView用コントローラ作成
+      initialPage: initialIndex.clamp(0, totalMonths - 1), // 範囲外を防ぐ
+    ); // controller終わり
   } // initState終わり
 
-  @override
+  @override // disposeをオーバーライド
   void dispose() {
-    _pageController.dispose(); // PageController破棄
-    super.dispose(); // 親クラスdispose
+    // 破棄時に呼ばれる
+    _pageController.dispose(); // PageController破棄（メモリリーク防止）
+    super.dispose(); // 親クラスの破棄
   } // dispose終わり
 
   int _monthIndexFrom(DateTime base, DateTime target) =>
       (target.year - base.year) * 12 +
       (target.month - base.month); // base→targetの月差をIndex化
+
   DateTime _monthFromIndex(int index) => DateTime(
     baseYear + (index ~/ 12),
     1 + (index % 12),
@@ -415,32 +400,38 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _handlePointerSignal(PointerSignalEvent event) {
     // ホイールで月送りするため
     if (event is PointerScrollEvent) {
+      // スクロールイベントだけ対象
       if (event.scrollDelta.dy > 18.0) {
+        // 下方向スクロールが一定以上なら
         _pageController.nextPage(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-        ); // 次月へ
+          // 次月へ
+          duration: const Duration(milliseconds: 180), // アニメ時間
+          curve: Curves.easeOut, // カーブ
+        ); // nextPage終わり
       } else if (event.scrollDelta.dy < -18.0) {
+        // 上方向スクロールが一定以上なら
         _pageController.previousPage(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-        ); // 前月へ
+          // 前月へ
+          duration: const Duration(milliseconds: 180), // アニメ時間
+          curve: Curves.easeOut, // カーブ
+        ); // previousPage終わり
       } // if/else終わり
     } // 型チェック終わり
   } // _handlePointerSignal終わり
 
   void _goToPickedMonth() {
     // ドロップダウン選択の年月へジャンプする
-    final target = DateTime(_pickedYear, _pickedMonth, 1); // 選択年月
+    final target = DateTime(_pickedYear, _pickedMonth, 1); // 選択年月（1日固定）
     final idx = _monthIndexFrom(
       baseMonth,
       target,
     ).clamp(0, totalMonths - 1); // Index化して範囲内へ
     _pageController.animateToPage(
-      idx,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-    ); // アニメ移動
+      // アニメ移動
+      idx, // 目的ページ
+      duration: const Duration(milliseconds: 220), // アニメ時間
+      curve: Curves.easeOut, // カーブ
+    ); // animateToPage終わり
   } // _goToPickedMonth終わり
 
   void _onDateTap(DateTime date, {required DateTime currentMonth}) {
@@ -458,141 +449,140 @@ class _CalendarScreenState extends State<CalendarScreen> {
   } // _onDateTap終わり
 
   // =========================== // セクション区切り
-  // ★複数収集に対応：指定日→ゴミ種別リスト（固定除外日・土日除外を最優先）
-  // - 収集日が被ったら、その数に応じて複数の色＆アイコンを表示できる
+  // ★何ゴミか判定（固定除外日を最優先） // 「複数被り」に対応するためListで返す
   // =========================== // セクション区切り
 
   List<GarbageType> _garbageTypesFor(DateTime date) {
-    // 指定日→その日に該当するゴミ種別を全て返す（0件なら収集なし）
+    // 指定日→該当するゴミ種別をすべて返す（複数被り対応）
     if (_noCollectionFixedDays.contains(mdKey(date))) {
-      return const <GarbageType>[]; // 年始固定除外日は収集なし（色もアイコンも出さない）
+      // 固定除外日なら
+      return const <GarbageType>[]; // 収集なし（色/アイコン表示なし）
     } // 固定除外チェック終わり
-
-    final wd = weekdayIndex0to6(date); // 曜日(0..6)
-    if (_disableWeekendCollection && (wd == 0 || wd == 6)) {
-      return const <GarbageType>[]; // 土日を収集なしとして扱う（重要なお知らせに合わせる）
-    } // 土日除外終わり
 
     final rules =
         _areaRules[_selectedArea] ?? const <GarbageRule>[]; // 選択区のルール一覧（なければ空）
-    final matched = <GarbageType>[]; // 一致した種別を溜める
+    final set = <GarbageType>{}; // 重複排除用のSet
+
     for (final r in rules) {
-      if (r.matches(date)) matched.add(r.type); // 一致したら追加（被ったら複数入る）
+      // ルールを全件評価（★被りを拾うためbreakしない）
+      if (r.matches(date)) set.add(r.type); // 一致したら種別を追加
     } // for終わり
 
-    return normalizeTypes(matched); // 重複除去＆表示順を安定化して返す
+    final list = set.toList(); // Set→Listへ変換
+    list.sort((a, b) {
+      // 表示順でソートして安定化
+      final ia = garbageTypeDisplayOrder.indexOf(a); // aの順位
+      final ib = garbageTypeDisplayOrder.indexOf(b); // bの順位
+      return ia.compareTo(ib); // 昇順
+    }); // sort終わり
+
+    return list; // 該当種別の一覧（空なら収集なし）
   } // _garbageTypesFor終わり
 
   String _garbageTextFor(DateTime date) {
-    // 選択日カード用「週×曜日：何ゴミ」文字列（複数対応）
+    // 選択日カード用「週×曜日：何ゴミ」文字列（複数被り対応）
     if (_noCollectionFixedDays.contains(mdKey(date))) {
+      // 固定除外日なら
       return _lang == UiLang.ja
           ? '年明けのため収集なし'
-          : 'No collection (New Year holidays)'; // 固定除外メッセージ
+          : 'No collection (New Year holidays)'; // 特別メッセージ
     } // 固定除外チェック終わり
 
-    final wd = weekdayIndex0to6(date); // 曜日
-    if (_disableWeekendCollection && (wd == 0 || wd == 6)) {
-      return _lang == UiLang.ja
-          ? '土日のため収集なし'
-          : 'No collection (weekend)'; // 土日メッセージ
-    } // 土日除外終わり
-
     final w = GarbageRule.weekOfMonth(date); // 第何週
+    final wd = weekdayIndex0to6(date); // 曜日0..6
+    final types = _garbageTypesFor(date); // ★複数種別（空なら収集なし）
+
     final wText = weekLabel(w, _lang); // 第N / 1st等
     final wdText = weekdayLabel0to6(wd, _lang); // 日/月/... or Sun/Mon...
 
-    final types = _garbageTypesFor(date); // 種別リスト（0件なら収集なし）
     final gText = types.isEmpty
-        ? garbageLabel(GarbageType.none, _lang)
+        ? garbageLabel(GarbageType.none, _lang) // 収集なし
         : types
               .map((t) => garbageLabel(t, _lang))
-              .join(_lang == UiLang.ja ? '／' : ' / '); // 種別表示（複数は区切り）
+              .join(_lang == UiLang.ja ? '・' : ' / '); // 複数は区切って表示
 
     return (_lang == UiLang.ja)
         ? '$wText$wdText曜日：$gText'
-        : '$wText $wdText: $gText'; // 日本語/英語で整形
+        : '$wText $wdText: $gText'; // 言語で表記切替
   } // _garbageTextFor終わり
 
-  @override
+  @override // buildをオーバーライド
   Widget build(BuildContext context) {
     // 画面UI構築（状態変化で再ビルド）
-    final noticeLines =
-        _importantNoticeByArea[_selectedArea] ??
-        const <String>[]; // 選択区の重要お知らせ行
-    final inquiry =
-        _inquiryByArea[_selectedArea] ??
-        const _InquiryInfo(
-          centerName: '',
-          phone: '',
-          hoursWeekday: '',
-          hoursHoliday: '',
-          websiteLabel: '',
-          websiteUrlText: '',
-        ); // 選択区の問い合わせ情報
-    final holidayPolicy =
-        _holidayPolicyByArea[_selectedArea] ??
-        HolidayPolicy.collect; // 選択区の祝日ポリシー
-    final selectedRules =
-        _areaRules[_selectedArea] ?? const <GarbageRule>[]; // 選択区のルール
-
     return Scaffold(
+      // 画面の土台
       backgroundColor: const Color(0xFFF6F7FB), // 背景色
       drawer: LeftMenuDrawer(
         lang: _lang,
         selectedArea: _selectedArea,
       ), // 左ドロワー（外部定義）
       appBar: AppBar(
+        // ヘッダー（固定でスクロールしない）
         centerTitle: true, // タイトル中央寄せ
         leading: Builder(
+          // Scaffold.of を使うためBuilderで別contextを作る
           builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu), // メニューアイコン
+            // メニューボタン
+            icon: const Icon(Icons.menu), // ハンバーガーアイコン
             onPressed: () => Scaffold.of(ctx).openDrawer(), // Drawerを開く
           ), // IconButton終わり
         ), // Builder終わり
         title: _HeaderDropdown<String>(
+          // AppBar中央のエリア選択
           label: _lang == UiLang.ja ? 'エリア' : 'Area', // ラベル（言語で切替）
           value: _selectedArea, // 現在選択値
           items: _areas, // 候補
           itemLabel: (v) => v, // 表示
-          onChanged: (v) => setState(() => _selectedArea = v), // 区変更→全表示更新
+          onChanged: (v) =>
+              setState(() => _selectedArea = v), // 選択区更新→色/アイコン/詳細も変わる
           width: 160, // 幅
         ), // _HeaderDropdown終わり
         actions: [
+          // AppBar右側
           Padding(
-            padding: const EdgeInsets.only(right: 12), // 右余白
+            // 右余白
+            padding: const EdgeInsets.only(right: 12), // 右に12
             child: LanguageSelector(
+              // 言語切替（外部定義）
               currentLang: _lang, // 現在言語
-              onChanged: (v) => setState(() => _lang = v), // 言語変更→全表示更新
+              onChanged: (v) => setState(() => _lang = v), // 言語変更→全表示の言語が変わる
             ), // LanguageSelector終わり
           ), // Padding終わり
         ], // actions終わり
       ), // AppBar終わり
-      // ★変更：AppBarより下を全体スクロールできるようにする
+      // ★変更：AppBarより下を全体スクロールできるようにする // 画面下部が長くなっても見やすい
       body: Scrollbar(
+        // スクロールバー表示（Web/デスクトップで位置が分かる）
         child: SingleChildScrollView(
+          // ヘッダー下の全内容を縦スクロール可能にする
           padding: const EdgeInsets.all(16), // 画面内余白
           child: Center(
+            // 横方向は中央寄せ
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520), // 最大幅を制限
+              // 幅を制限して読みやすく
+              constraints: const BoxConstraints(maxWidth: 520), // 最大幅520
               child: Column(
+                // 中身を縦に並べる
                 children: [
-                  // ===========================
-                  // 上段：年月選択＋カレンダー本体
-                  // ===========================
                   Container(
+                    // 年月選択＋カレンダー本体のカード
                     padding: const EdgeInsets.all(12), // 内側余白
                     decoration: BoxDecoration(
+                      // 見た目
                       color: Colors.white, // 背景白
                       borderRadius: BorderRadius.circular(14), // 角丸
                       border: Border.all(color: const Color(0xFFE1E5EE)), // 枠線
                     ), // decoration終わり
                     child: Column(
+                      // カード内を縦に配置
                       children: [
                         Row(
+                          // 年/月ドロップダウンを横並び
                           children: [
                             Expanded(
+                              // 年側を伸ばす
                               child: _LabeledDropdown<int>(
+                                // 年ドロップダウン
                                 label: '年', // ラベル
                                 value: _pickedYear, // 選択年
                                 items: List.generate(
@@ -601,73 +591,89 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 ), // 年候補
                                 itemLabel: (v) => '$v', // 表示文字
                                 onChanged: (v) {
+                                  // 変更時
                                   setState(() => _pickedYear = v); // 状態更新
                                   _goToPickedMonth(); // その年月へ移動
                                 }, // onChanged終わり
                               ), // 年ドロップダウン終わり
                             ), // Expanded終わり
-                            const SizedBox(width: 10), // 間隔
+                            const SizedBox(width: 10), // 年と月の間隔
                             Expanded(
+                              // 月側を伸ばす
                               child: _LabeledDropdown<int>(
+                                // 月ドロップダウン
                                 label: '月', // ラベル
                                 value: _pickedMonth, // 選択月
                                 items: List.generate(12, (i) => i + 1), // 1〜12
                                 itemLabel: (v) => '$v', // 表示文字
                                 onChanged: (v) {
+                                  // 変更時
                                   setState(() => _pickedMonth = v); // 状態更新
                                   _goToPickedMonth(); // その年月へ移動
                                 }, // onChanged終わり
                               ), // 月ドロップダウン終わり
                             ), // Expanded終わり
-                          ], // children終わり
+                          ], // Row children終わり
                         ), // Row終わり
-                        const SizedBox(height: 8), // 間隔
+                        const SizedBox(height: 8), // 年月とカレンダーの間隔
                         AspectRatio(
+                          // カレンダー枠の縦横比を固定（スクロール内で高さを安定）
                           aspectRatio: 7 / 7, // ほぼ正方形
                           child: Container(
+                            // カレンダー枠
                             decoration: BoxDecoration(
+                              // 枠の見た目
                               borderRadius: BorderRadius.circular(12), // 角丸
                               border: Border.all(
                                 color: const Color(0xFFCED6E6),
                               ), // 枠線
                             ), // decoration終わり
-                            clipBehavior: Clip.antiAlias, // 角丸外をクリップ
+                            clipBehavior: Clip.antiAlias, // 角丸の外をクリップ
                             child: Column(
+                              // 曜日行＋月グリッド
                               children: [
                                 _WeekdayRow(lang: _lang), // 曜日ラベル行
                                 Expanded(
+                                  // 残り領域をPageViewへ
                                   child: Listener(
+                                    // ホイールで月移動できるようにする
                                     onPointerSignal:
                                         _handlePointerSignal, // ホイール処理
                                     child: PageView.builder(
+                                      // 月ページを縦方向に切替
                                       controller: _pageController, // コントローラ
-                                      scrollDirection: Axis.vertical, // 縦スワイプ
+                                      scrollDirection:
+                                          Axis.vertical, // 縦スワイプで月移動
                                       itemCount: totalMonths, // ページ数
                                       onPageChanged: (index) {
+                                        // ページが変わったら
                                         final m = _monthFromIndex(
                                           index,
-                                        ); // index→年月
+                                        ); // index→年月を復元
                                         setState(() {
-                                          _visibleYear = m.year; // 表示年更新
-                                          _visibleMonth = m.month; // 表示月更新
-                                          _pickedYear = m.year; // ドロップダウン同期
-                                          _pickedMonth = m.month; // ドロップダウン同期
+                                          // 状態更新
+                                          _visibleYear = m.year; // 表示年
+                                          _visibleMonth = m.month; // 表示月
+                                          _pickedYear = m.year; // ドロップダウン年も同期
+                                          _pickedMonth = m.month; // ドロップダウン月も同期
                                         }); // setState終わり
                                       }, // onPageChanged終わり
                                       itemBuilder: (context, index) {
+                                        // 月ページの描画
                                         final month = _monthFromIndex(
                                           index,
                                         ); // 対象月
                                         return _MonthGrid(
+                                          // 月グリッド（★複数色＋複数アイコン対応）
                                           month: month, // 表示月
                                           selectedDate: _selectedDate, // 選択日
                                           garbageTypesOf:
-                                              _garbageTypesFor, // ★日付→複数種別（色/アイコン複数表示用）
+                                              _garbageTypesFor, // ★日付→複数種別（セル色/アイコン用）
                                           onDateTap: (d) => _onDateTap(
                                             d,
                                             currentMonth: month,
                                           ), // タップ処理
-                                          lang: _lang, // 言語
+                                          lang: _lang, // 言語（拡張用）
                                         ); // _MonthGrid終わり
                                       }, // itemBuilder終わり
                                     ), // PageView.builder終わり
@@ -682,101 +688,103 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ), // カレンダーカード終わり
 
                   const SizedBox(height: 12), // 間隔
-                  // ===========================
-                  // 選択日情報カード
-                  // ===========================
+
                   _SelectedInfoCard(
+                    // 選択日情報カード
                     selectedDate: _selectedDate, // 選択日
                     lang: _lang, // 言語
                     garbageTextOf: _garbageTextFor, // 日付→「週×曜日：何ゴミ」文
-                    garbageTypesOf: _garbageTypesFor, // ★日付→複数種別（アイコン表示用）
                   ), // _SelectedInfoCard終わり
 
                   const SizedBox(height: 10), // 間隔
-                  // ===========================
-                  // 詳細情報の表示/非表示ボタン
-                  // ===========================
+
                   SizedBox(
-                    width: double.infinity, // カード幅と同じ
+                    // ボタン幅をカードに合わせる箱
+                    width: double.infinity, // ConstrainedBox内なのでカードと同じ幅
                     child: ElevatedButton(
+                      // 「詳細情報」表示/非表示ボタン
                       onPressed: () =>
                           setState(() => _showGuide = !_showGuide), // 押すたびに切替
                       style: ElevatedButton.styleFrom(
+                        // ボタン見た目
                         backgroundColor: Colors.blue, // 青
                         foregroundColor: Colors.white, // 白文字
                         padding: const EdgeInsets.all(12), // 余白
-                        minimumSize: const Size.fromHeight(48), // 高さ
+                        minimumSize: const Size.fromHeight(48), // 高さ確保
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ), // 角丸
                       ), // style終わり
                       child: Text(
+                        // ボタン文字
                         _showGuide
                             ? (_lang == UiLang.ja ? '詳細情報を非表示' : 'Hide guide')
-                            : (_lang == UiLang.ja
-                                  ? '詳細情報を表示'
-                                  : 'Show guide'), // 文言切替
+                            : (_lang == UiLang.ja ? '詳細情報を表示' : 'Show guide'),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                         ), // 太字
                       ), // Text終わり
                     ), // ElevatedButton終わり
                   ), // SizedBox終わり
-                  // ===========================
-                  // 詳細情報パネル（区ごとに切替＋種別カード縦並び）
-                  // ===========================
+                  // ★詳細情報（区ごと切替＋種別カード縦並び）はAnimatedSwitcherで表示/非表示
                   AnimatedSwitcher(
+                    // 表示/非表示を滑らかに切替
                     duration: const Duration(milliseconds: 220), // 切替時間
                     switchInCurve: Curves.easeOut, // 表示カーブ
                     switchOutCurve: Curves.easeOut, // 非表示カーブ
                     child: _showGuide
                         ? Padding(
-                            key: const ValueKey('guide'), // キー
-                            padding: const EdgeInsets.only(top: 10), // 余白
+                            // 表示時の上余白
+                            key: const ValueKey('guide'), // AnimatedSwitcher用キー
+                            padding: const EdgeInsets.only(top: 10), // ボタンとの間隔
                             child: _GarbageGuidePanel(
+                              // 詳細情報パネル
                               lang: _lang, // 言語
-                              selectedArea: _selectedArea, // 区
-                              rules: selectedRules, // ルール
-                              disableWeekendCollection:
-                                  _disableWeekendCollection, // 土日無効設定
+                              selectedArea: _selectedArea, // 区名（見出し）
+                              rules:
+                                  _areaRules[_selectedArea] ??
+                                  const <GarbageRule>[], // 選択区のルール
                             ), // _GarbageGuidePanel終わり
-                          ) // Padding終わり
+                          )
                         : const SizedBox.shrink(
                             key: ValueKey('empty'),
-                          ), // 非表示は高さ0
+                          ), // 非表示時は高さ0
                   ), // AnimatedSwitcher終わり
 
-                  const SizedBox(height: 10), // 間隔（ボタン/パネルの下）
-                  // ===========================
-                  // ★追加：重要なお知らせ（赤いカード・区ごとに内容切替）
-                  // ===========================
+                  const SizedBox(height: 10), // 間隔（ボタン/詳細情報の下）
+
                   _ImportantNoticeCard(
-                    lang: _lang, // 言語（将来英語化する場合に使用）
-                    selectedArea: _selectedArea, // 区（見出し用）
-                    lines: noticeLines, // 表示する行
+                    // ★追加：赤い「重要なお知らせ」カード
+                    lang: _lang, // 言語（将来拡張用）
+                    selectedArea: _selectedArea, // 区名（見出しに表示）
+                    items:
+                        _importantNoticeByArea[_selectedArea] ??
+                        _commonImportantNotice, // 区ごとのお知らせ
                   ), // _ImportantNoticeCard終わり
 
                   const SizedBox(height: 10), // 間隔
-                  // ===========================
-                  // ★追加：お問い合わせ（青いカード・区ごとに内容切替／[]内はグレー）
-                  // ===========================
+
                   _InquiryCard(
-                    lang: _lang, // 言語（将来英語化する場合に使用）
-                    selectedArea: _selectedArea, // 区（見出し用）
-                    info: inquiry, // 問い合わせ情報
+                    // ★追加：青い「お問い合わせ」カード
+                    lang: _lang, // 言語（将来拡張用）
+                    selectedArea: _selectedArea, // 区名（見出しに表示）
+                    lines:
+                        _inquiryByArea[_selectedArea] ??
+                        _commonInquiry, // 区ごとの問い合わせ
                   ), // _InquiryCard終わり
 
                   const SizedBox(height: 10), // 間隔
-                  // ===========================
-                  // ★追加：収集スケジュール（グレーのカード・お問い合わせの下）
-                  // ===========================
+
                   _CollectionScheduleCard(
-                    lang: _lang, // 言語
-                    selectedArea: _selectedArea, // 区
-                    rules: selectedRules, // ルール
-                    holidayPolicy: holidayPolicy, // 祝日ポリシー
-                    disableWeekendCollection:
-                        _disableWeekendCollection, // 土日無効設定
+                    // ★追加：グレーの「収集スケジュール」カード（お問い合わせの下）
+                    lang: _lang, // 言語（将来拡張用）
+                    selectedArea: _selectedArea, // 区名（見出しに表示）
+                    rules:
+                        _areaRules[_selectedArea] ??
+                        const <GarbageRule>[], // 区のルール（週×曜日）
+                    collectOnHolidays:
+                        _collectOnHolidaysByArea[_selectedArea] ??
+                        true, // 祝日収集するか
                   ), // _CollectionScheduleCard終わり
                 ], // children終わり
               ), // Column終わり
@@ -793,6 +801,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 // =========================== // セクション区切り
 
 class _HeaderDropdown<T> extends StatelessWidget {
+  // AppBar内で使う装飾付きDropdown
   final String label; // 表示ラベル（例：エリア）
   final T value; // 現在値
   final List<T> items; // 候補一覧
@@ -801,27 +810,32 @@ class _HeaderDropdown<T> extends StatelessWidget {
   final double width; // 幅
 
   const _HeaderDropdown({
-    required this.label,
-    required this.value,
-    required this.items,
-    required this.itemLabel,
-    required this.onChanged,
-    required this.width,
+    // コンストラクタ
+    required this.label, // ラベル
+    required this.value, // 現在値
+    required this.items, // 候補
+    required this.itemLabel, // 表示変換
+    required this.onChanged, // 変更処理
+    required this.width, // 幅
   }); // コンストラクタ終わり
 
-  @override
+  @override // buildオーバーライド
   Widget build(BuildContext context) {
+    // UI構築
     return SizedBox(
+      // 幅固定
       width: width, // 指定幅
       child: DecoratedBox(
+        // 背景と枠線
         decoration: BoxDecoration(
           border: Border.all(color: const Color(0xFFE1E5EE)), // 枠線
           borderRadius: BorderRadius.circular(10), // 角丸
           color: const Color(0xFFE7EBF3), // 背景
         ), // decoration終わり
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10), // 左右余白
+          padding: const EdgeInsets.symmetric(horizontal: 10), // 内側余白
           child: DropdownButtonHideUnderline(
+            // 下線を消す
             child: DropdownButton<T>(
               value: value, // 現在値
               isDense: true, // 高さ詰め
@@ -829,12 +843,12 @@ class _HeaderDropdown<T> extends StatelessWidget {
               items: items
                   .map(
                     (v) => DropdownMenuItem<T>(
-                      value: v,
+                      value: v, // 値
                       child: Text(
-                        '$label: ${itemLabel(v)}',
-                        overflow: TextOverflow.ellipsis,
-                      ), // 「ラベル: 値」
-                    ),
+                        '$label: ${itemLabel(v)}', // 表示
+                        overflow: TextOverflow.ellipsis, // 長い時省略
+                      ), // Text終わり
+                    ), // DropdownMenuItem終わり
                   )
                   .toList(), // List化
               onChanged: (v) {
@@ -853,6 +867,7 @@ class _HeaderDropdown<T> extends StatelessWidget {
 // =========================== // セクション区切り
 
 class _LabeledDropdown<T> extends StatelessWidget {
+  // InputDecorator風Dropdown
   final String label; // ラベル（年/月）
   final T value; // 現在値
   final List<T> items; // 候補一覧
@@ -860,11 +875,11 @@ class _LabeledDropdown<T> extends StatelessWidget {
   final ValueChanged<T> onChanged; // 変更通知
 
   const _LabeledDropdown({
-    required this.label,
-    required this.value,
-    required this.items,
-    required this.itemLabel,
-    required this.onChanged,
+    required this.label, // ラベル
+    required this.value, // 値
+    required this.items, // 候補
+    required this.itemLabel, // 表示変換
+    required this.onChanged, // 変更処理
   }); // コンストラクタ終わり
 
   @override
@@ -886,9 +901,12 @@ class _LabeledDropdown<T> extends StatelessWidget {
           isExpanded: true, // 横幅いっぱい
           items: items
               .map(
-                (v) => DropdownMenuItem<T>(value: v, child: Text(itemLabel(v))),
+                (v) => DropdownMenuItem<T>(
+                  value: v, // 値
+                  child: Text(itemLabel(v)), // 表示
+                ), // DropdownMenuItem終わり
               )
-              .toList(), // 候補をMenuItemへ
+              .toList(), // List化
           onChanged: (v) {
             if (v != null) onChanged(v); // nullでなければ通知
           }, // onChanged終わり
@@ -903,23 +921,24 @@ class _LabeledDropdown<T> extends StatelessWidget {
 // =========================== // セクション区切り
 
 class _WeekdayRow extends StatelessWidget {
+  // 曜日ラベル行（日〜土 / Sun〜Sat）
   final UiLang lang; // 表示言語
   const _WeekdayRow({required this.lang}); // コンストラクタ
 
   @override
   Widget build(BuildContext context) {
     final labels = (lang == UiLang.ja)
-        ? const ['日', '月', '火', '水', '木', '金', '土']
-        : const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // 曜日ラベル
+        ? const ['日', '月', '火', '水', '木', '金', '土'] // 日本語
+        : const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // 英語
 
     return Container(
       height: 40, // 高さ固定
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE7EBF3))),
-      ), // 下線
+        border: Border(bottom: BorderSide(color: Color(0xFFE7EBF3))), // 下線
+      ), // decoration終わり
       child: Row(
         children: List.generate(
-          7,
+          7, // 7曜日
           (i) => Expanded(
             child: Center(
               child: Text(
@@ -929,7 +948,9 @@ class _WeekdayRow extends StatelessWidget {
                   fontWeight: FontWeight.bold, // 太字
                   color: i == 0
                       ? Colors.red
-                      : (i == 6 ? Colors.blue : Colors.black), // 日=赤、土=青
+                      : i == 6
+                      ? Colors.blue
+                      : Colors.black, // 日=赤、土=青、平日=黒
                 ), // style終わり
               ), // Text終わり
             ), // Center終わり
@@ -941,33 +962,67 @@ class _WeekdayRow extends StatelessWidget {
 } // _WeekdayRow終わり
 
 // =========================== // セクション区切り
-// 補助ウィジェット：月グリッド（背景色複数＋日付下アイコン複数）
+// 補助ウィジェット：月グリッド（★複数色＋複数アイコン対応）
 // =========================== // セクション区切り
 
 class _MonthGrid extends StatelessWidget {
+  // 1か月分を描画
   final DateTime month; // 表示月（1日固定想定）
   final DateTime? selectedDate; // 選択日
   final ValueChanged<DateTime> onDateTap; // 日付タップ通知
   final List<GarbageType> Function(DateTime date)
-  garbageTypesOf; // ★日付→複数種別（被り対応）
-  final UiLang lang; // 言語
+  garbageTypesOf; // ★日付→複数種別（セル色/アイコン用）
+  final UiLang lang; // 言語（拡張用）
 
   const _MonthGrid({
-    required this.month,
-    required this.selectedDate,
-    required this.onDateTap,
-    required this.garbageTypesOf,
-    required this.lang,
+    required this.month, // 月
+    required this.selectedDate, // 選択日
+    required this.onDateTap, // タップ処理
+    required this.garbageTypesOf, // 種別判定（複数）
+    required this.lang, // 言語
   }); // コンストラクタ終わり
+
+  List<GarbageType> _sortedTypes(List<GarbageType> types) {
+    // 種別を表示順で整列する（UIを安定させる）
+    final list = [...types]; // 破壊しないようコピー
+    list.sort(
+      (a, b) => garbageTypeDisplayOrder
+          .indexOf(a)
+          .compareTo(garbageTypeDisplayOrder.indexOf(b)),
+    ); // 順位比較
+    return list; // ソート済みリスト
+  } // _sortedTypes終わり
+
+  Widget _multiTypeBackground(List<GarbageType> types) {
+    // ★複数種別の背景を「横分割」で表示する（色が複数見える）
+    if (types.isEmpty) {
+      // 収集なしなら
+      return const SizedBox.expand(); // 何も描かない
+    } // if終わり
+
+    final t = _sortedTypes(types); // 表示順で整列
+
+    return Row(
+      // 横に分割して複数色を見せる
+      children: [
+        for (final type in t)
+          Expanded(
+            child: Container(
+              color: garbageColor(type), // 種別→背景色（薄い色）
+            ), // Container終わり
+          ), // Expanded終わり
+      ], // children終わり
+    ); // Row終わり
+  } // _multiTypeBackground終わり
 
   @override
   Widget build(BuildContext context) {
     final first = DateTime(month.year, month.month, 1); // 表示月の1日
     final offset = first.weekday % 7; // 日曜始まりのオフセット（日=0）
     final cells = List<DateTime>.generate(
-      42,
-      (i) => DateTime(month.year, month.month, 1 + (i - offset)),
-    ); // 42セル（前後月含む）
+      42, // 6週×7日
+      (i) => DateTime(month.year, month.month, 1 + (i - offset)), // 前後月含め連続日付
+    ); // cells終わり
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -976,56 +1031,66 @@ class _MonthGrid extends StatelessWidget {
 
         return Column(
           children: List.generate(
-            6,
+            6, // 6行
             (row) => SizedBox(
-              height: cellH,
+              height: cellH, // 行高さ
               child: Row(
                 children: List.generate(
-                  7,
+                  7, // 7列
                   (col) {
-                    final d = cells[row * 7 + col]; // このセルの日付
-                    final isInThisMonth = d.month == month.month; // 当月かどうか
+                    final d = cells[row * 7 + col]; // セル日付
+                    final isInThisMonth = d.month == month.month; // 当月セルか
 
                     final isSelected =
-                        selectedDate != null &&
-                        d.year == selectedDate!.year &&
-                        d.month == selectedDate!.month &&
-                        d.day == selectedDate!.day; // 選択判定
+                        selectedDate != null && // 選択日が存在し
+                        d.year == selectedDate!.year && // 年一致
+                        d.month == selectedDate!.month && // 月一致
+                        d.day == selectedDate!.day; // 日一致
 
                     final types = isInThisMonth
                         ? garbageTypesOf(d)
-                        : const <GarbageType>[]; // 当月のみ判定（はみ出しは空）
-                    final selectedBorderColor = isSelected
-                        ? const Color(0xFF5B8DEF)
-                        : const Color(0xFFF0F0F0); // 枠線色
-                    final selectedBorderWidth = isSelected ? 1.2 : 1.0; // 枠線太さ
+                        : const <GarbageType>[]; // ★当月だけ判定（はみ出しは空）
+                    final selectedOverlay = Colors.blue.withOpacity(
+                      0.10,
+                    ); // 選択時の薄青
+
+                    final typesSorted = _sortedTypes(
+                      types,
+                    ); // ★表示順に整列（アイコンも背景も同順）
 
                     return SizedBox(
-                      width: cellW,
+                      width: cellW, // セル幅
                       child: Container(
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: selectedBorderColor,
-                            width: selectedBorderWidth,
-                          ), // 枠線
+                            color: isSelected
+                                ? const Color(0xFF5B8DEF)
+                                : const Color(0xFFF0F0F0), // 選択枠は濃い
+                            width: isSelected ? 1.2 : 1.0, // 選択枠は少し太い
+                          ), // border終わり
+                          color: Colors.transparent, // 背景はStack側で描くので透明
                         ), // decoration終わり
                         child: Material(
-                          color: Colors.transparent, // 背景はStack側で描くので透明
+                          color:
+                              Colors.transparent, // InkWellのためにMaterialを置く（透明）
                           child: InkWell(
                             onTap: () => onDateTap(d), // タップで日付選択
                             child: Stack(
+                              fit: StackFit.expand, // セル全体に広げる
                               children: [
                                 Positioned.fill(
-                                  child: _MultiTypeBackground(
-                                    types: types,
-                                  ), // ★複数色の背景（0件なら透明）
-                                ), // 背景終わり
+                                  child: _multiTypeBackground(
+                                    typesSorted,
+                                  ), // ★複数色背景を描画
+                                ), // Positioned.fill終わり
+
                                 if (isSelected)
                                   Positioned.fill(
                                     child: Container(
-                                      color: Colors.blue.withOpacity(0.10),
-                                    ), // 選択時の薄青オーバーレイ
-                                  ), // 選択オーバーレイ終わり
+                                      color: selectedOverlay,
+                                    ), // ★選択中は青を上から薄く重ねる
+                                  ), // Positioned.fill終わり
+
                                 Center(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min, // 中身を最小化
@@ -1041,26 +1106,26 @@ class _MonthGrid extends StatelessWidget {
                                           fontWeight: FontWeight.bold, // 太字
                                         ), // style終わり
                                       ), // Text終わり
+                                      // ★当月セルかつ「収集あり（typesが空でない）」なら複数アイコンを表示
                                       if (isInThisMonth &&
-                                          types.isNotEmpty) ...[
+                                          typesSorted.isNotEmpty) ...[
                                         const SizedBox(height: 2), // 間隔
                                         Wrap(
-                                          spacing: 2, // アイコン間隔
-                                          runSpacing: 2, // 折返し間隔
+                                          // ★複数アイコンを横に並べ、入りきらなければ折り返す
+                                          spacing: 2, // 横間隔
+                                          runSpacing: 0, // 縦間隔
                                           alignment:
                                               WrapAlignment.center, // 中央寄せ
-                                          children: types
-                                              .take(4) // 表示数を抑えて見やすく（最大4）
-                                              .map(
-                                                (t) => Icon(
-                                                  garbageIcon(t), // 種別→アイコン
-                                                  size: 14, // 小さめ
-                                                  color: garbageIconColor(
-                                                    t,
-                                                  ), // 種別→アイコン色
-                                                ),
-                                              )
-                                              .toList(), // List化
+                                          children: [
+                                            for (final t in typesSorted)
+                                              Icon(
+                                                garbageIcon(t), // 種別→アイコン
+                                                size: 14, // 小さめ
+                                                color: garbageIconColor(
+                                                  t,
+                                                ), // 種別→アイコン色
+                                              ), // Icon終わり
+                                          ], // children終わり
                                         ), // Wrap終わり
                                       ], // if終わり
                                     ], // children終わり
@@ -1083,190 +1148,140 @@ class _MonthGrid extends StatelessWidget {
   } // build終わり
 } // _MonthGrid終わり
 
-class _MultiTypeBackground extends StatelessWidget {
-  // ★複数色を1セル内に表示する背景（被った数に応じて色が増える）
-  final List<GarbageType> types; // 表示する種別リスト（0件なら透明）
-  const _MultiTypeBackground({required this.types}); // コンストラクタ
-
-  @override
-  Widget build(BuildContext context) {
-    if (types.isEmpty) {
-      return const SizedBox.expand(); // 何もなければ透明（何も描かない）
-    } // if終わり
-
-    if (types.length == 1) {
-      return Container(color: garbageColor(types.first)); // 1種類なら単色
-    } // if終わり
-
-    return Row(
-      children: types
-          .map(
-            (t) => Expanded(
-              child: Container(color: garbageColor(t)), // 複数なら等分ストライプで表示
-            ),
-          )
-          .toList(), // List化
-    ); // Row終わり
-  } // build終わり
-} // _MultiTypeBackground終わり
-
 // =========================== // セクション区切り
-// 補助ウィジェット：選択日情報カード（複数種別対応）
+// 補助ウィジェット：選択日情報カード // 選択日と「週×曜日：何ゴミ」を表示
 // =========================== // セクション区切り
 
 class _SelectedInfoCard extends StatelessWidget {
-  final DateTime? selectedDate; // 選択日
+  // 選択日情報カード
+  final DateTime? selectedDate; // 選択日（nullなら未選択）
   final UiLang lang; // 表示言語
-  final String Function(DateTime date) garbageTextOf; // 日付→表示文言
-  final List<GarbageType> Function(DateTime date)
-  garbageTypesOf; // ★日付→複数種別（アイコン表示）
+  final String Function(DateTime date) garbageTextOf; // 日付→表示文言（週×曜日：何ゴミ）
 
   const _SelectedInfoCard({
-    required this.selectedDate,
-    required this.lang,
-    required this.garbageTextOf,
-    required this.garbageTypesOf,
+    required this.selectedDate, // 選択日
+    required this.lang, // 言語
+    required this.garbageTextOf, // 文言生成関数
   }); // コンストラクタ終わり
 
   @override
   Widget build(BuildContext context) {
     if (selectedDate == null) {
+      // 未選択なら
       return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
+        width: double.infinity, // 横幅いっぱい
+        padding: const EdgeInsets.all(12), // 余白
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(lang == UiLang.ja ? '日付を選択してください' : 'Please select a date'),
-      ); // 未選択カード
+          color: Colors.white, // 背景白
+          borderRadius: BorderRadius.circular(12), // 角丸
+        ), // decoration終わり
+        child: Text(
+          lang == UiLang.ja ? '日付を選択してください' : 'Please select a date',
+        ), // 案内文
+      ); // Container終わり
     } // if終わり
 
-    final info = garbageTextOf(selectedDate!); // 選択日の説明文
-    final types = garbageTypesOf(selectedDate!); // 選択日の種別（複数）
+    final info = garbageTextOf(selectedDate!); // 選択日の説明文を作る
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      width: double.infinity, // 横幅いっぱい
+      padding: const EdgeInsets.all(12), // 余白
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
+        color: Colors.white, // 背景白
+        borderRadius: BorderRadius.circular(12), // 角丸
+      ), // decoration終わり
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
         children: [
           Text(
-            '${selectedDate!.year}/${selectedDate!.month}/${selectedDate!.day}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          const SizedBox(height: 6),
-          Text(info),
-          if (types.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: types
-                  .map(
-                    (t) => Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          garbageIcon(t),
-                          size: 18,
-                          color: garbageIconColor(t),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          garbageLabel(t, lang),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  )
-                  .toList(),
-            ),
-          ],
-        ],
-      ),
+            '${selectedDate!.year}/${selectedDate!.month}/${selectedDate!.day}', // 日付表示
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ), // 太字・大きめ
+          ), // Text終わり
+          const SizedBox(height: 6), // 間隔
+          Text(info), // 「週×曜日：何ゴミ」または固定除外メッセージ
+        ], // children終わり
+      ), // Column終わり
     ); // Container終わり
   } // build終わり
 } // _SelectedInfoCard終わり
 
-// ===========================
+// =========================== // セクション区切り
 // ★詳細情報パネル：区ごとに内容を切替／ゴミ種別ごとにカードを縦に並べて表示
-// ===========================
+// =========================== // セクション区切り
 
 class _GarbageGuidePanel extends StatelessWidget {
   final UiLang lang; // 表示言語
-  final String selectedArea; // 区
-  final List<GarbageRule> rules; // ルール
-  final bool disableWeekendCollection; // 土日無効設定
+  final String selectedArea; // 選択中の区（区ごとに見出しや内容を切替）
+  final List<GarbageRule> rules; // 選択中の区のルール（週×曜日）
 
   const _GarbageGuidePanel({
-    required this.lang,
-    required this.selectedArea,
-    required this.rules,
-    required this.disableWeekendCollection,
+    required this.lang, // 言語
+    required this.selectedArea, // 区名
+    required this.rules, // ルール一覧
   }); // コンストラクタ終わり
 
   Map<GarbageType, List<GarbageRule>> _groupRulesByType(
     List<GarbageRule> rules,
   ) {
-    final map = <GarbageType, List<GarbageRule>>{}; // 種別→ルール一覧
+    final map = <GarbageType, List<GarbageRule>>{}; // 種別→ルール一覧のMap
     for (final r in rules) {
-      if (disableWeekendCollection &&
-          (r.weekday0to6 == 0 || r.weekday0to6 == 6)) {
-        continue; // 土日無効なら土日ルールを表示から除外（見た目と判定を一致させる）
-      }
-      map.putIfAbsent(r.type, () => <GarbageRule>[]).add(r); // 種別配列に追加
-    }
-    return map;
+      map.putIfAbsent(r.type, () => <GarbageRule>[]).add(r); // 種別の配列に追加（なければ作る）
+    } // for終わり
+    return map; // まとめたMapを返す
   } // _groupRulesByType終わり
 
   String _weeksText(Set<int> weeks) {
-    final list = weeks.toList()..sort(); // ソート
+    final list = weeks.toList()..sort(); // ソートしたリストへ変換
+
     final isEveryWeek =
         list.length >= 5 &&
         list.contains(1) &&
         list.contains(2) &&
         list.contains(3) &&
         list.contains(4) &&
-        list.contains(5); // 1〜5が揃えば毎週扱い
+        list.contains(5); // 1〜5週が揃っていれば毎週
+
     if (isEveryWeek) return (lang == UiLang.ja) ? '毎週' : 'Every week'; // 毎週表記
+
     if (lang == UiLang.ja)
-      return list.map((w) => weekLabel(w, lang)).join('・'); // 例：第1・第3
-    return list.map((w) => weekLabel(w, lang)).join(' & '); // 例：1st & 3rd
+      return list.map((w) => weekLabel(w, lang)).join('・'); // 日本語：第1・第3
+    return list.map((w) => weekLabel(w, lang)).join(' & '); // 英語：1st & 3rd
   } // _weeksText終わり
 
   String _ruleLine(GarbageRule r) {
-    final wd = weekdayLabel0to6(r.weekday0to6, lang); // 曜日文字
-    final w = _weeksText(r.weeks); // 週文字
-    if (lang == UiLang.ja) return '$w${wd}曜日'; // 例：毎週月曜日
-    return '$w $wd'; // 例：Every week Mon
+    final wd = weekdayLabel0to6(r.weekday0to6, lang); // 曜日文字（例：月 / Mon）
+    final w = _weeksText(r.weeks); // 週文字（例：毎週 / 第1・第3）
+    return (lang == UiLang.ja) ? '$w${wd}曜日' : '$w $wd'; // 言語で表記切替
   } // _ruleLine終わり
 
   Widget _typeCard({
-    required GarbageType type,
-    required String title,
-    required String note,
-    required List<GarbageRule> typeRules,
+    required GarbageType type, // 対象種別
+    required String title, // 種別タイトル
+    required String note, // 注意点
+    required List<GarbageRule> typeRules, // その種別のルール
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10), // カード同士の縦間隔
+      padding: const EdgeInsets.all(12), // 内側余白
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE1E5EE)),
-      ),
+        color: Colors.white, // 背景白
+        borderRadius: BorderRadius.circular(12), // 角丸
+        border: Border.all(color: const Color(0xFFE1E5EE)), // 枠線
+      ), // decoration終わり
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
         children: [
           Row(
             children: [
-              Icon(garbageIcon(type), color: garbageIconColor(type), size: 20),
-              const SizedBox(width: 8),
+              Icon(
+                garbageIcon(type),
+                color: garbageIconColor(type),
+                size: 20,
+              ), // アイコン
+              const SizedBox(width: 8), // 間隔
               Expanded(
                 child: Text(
                   title,
@@ -1274,46 +1289,46 @@ class _GarbageGuidePanel extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
-                ),
-              ),
+                ), // タイトル
+              ), // Expanded終わり
               Container(
-                width: 18,
-                height: 18,
+                width: 18, // 幅
+                height: 18, // 高さ
                 decoration: BoxDecoration(
-                  color: garbageColor(type),
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: const Color(0xFFCED6E6)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+                  color: garbageColor(type), // 背景色チップ
+                  borderRadius: BorderRadius.circular(5), // 角丸
+                  border: Border.all(color: const Color(0xFFCED6E6)), // 枠線
+                ), // decoration終わり
+              ), // Container終わり
+            ], // children終わり
+          ), // Row終わり
+          const SizedBox(height: 8), // 間隔
           Text(
             lang == UiLang.ja ? '収集日' : 'Collection days',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          const SizedBox(height: 4),
+          ), // 見出し
+          const SizedBox(height: 4), // 間隔
           if (typeRules.isEmpty)
             Text(
               lang == UiLang.ja ? 'この区では設定がありません' : 'No rule set for this area',
-            )
+            ) // なし表示
           else
-            ...typeRules.map((r) => Text('• ${_ruleLine(r)}')),
-          const SizedBox(height: 10),
+            ...typeRules.map((r) => Text('• ${_ruleLine(r)}')), // ルール表示
+          const SizedBox(height: 10), // 間隔
           Text(
             lang == UiLang.ja ? '注意点' : 'Tips',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          Text(note),
-        ],
-      ),
-    );
+          ), // 見出し
+          const SizedBox(height: 4), // 間隔
+          Text(note), // 注意点本文
+        ], // children終わり
+      ), // Column終わり
+    ); // Container終わり
   } // _typeCard終わり
 
   @override
   Widget build(BuildContext context) {
-    final grouped = _groupRulesByType(rules); // 種別ごとにまとめる（土日無効なら土日も除外）
+    final grouped = _groupRulesByType(rules); // ルールを種別ごとにまとめる
 
     final items = <_GarbageGuideItem>[
       _GarbageGuideItem(
@@ -1355,7 +1370,7 @@ class _GarbageGuidePanel extends StatelessWidget {
         noteEn:
             'Often requires reservation/sticker. Follow local size and set-out rules.',
       ),
-    ];
+    ]; // items終わり
 
     final order = <GarbageType>[
       GarbageType.burnable,
@@ -1364,97 +1379,92 @@ class _GarbageGuidePanel extends StatelessWidget {
       GarbageType.nonBurnable,
       GarbageType.bulky,
     ]; // 表示順
-    final itemMap = {for (final it in items) it.type: it}; // type→item のMap
+
+    final itemMap = {for (final it in items) it.type: it}; // type→item のMap化
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      width: double.infinity, // 横幅いっぱい
+      padding: const EdgeInsets.all(12), // 余白
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE1E5EE)),
-      ),
+        color: Colors.white, // 背景白
+        borderRadius: BorderRadius.circular(12), // 角丸
+        border: Border.all(color: const Color(0xFFE1E5EE)), // 枠線
+      ), // decoration終わり
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
         children: [
           Text(
             lang == UiLang.ja
                 ? '$selectedArea の 詳細情報'
-                : 'Details: $selectedArea',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 6),
+                : 'Details: $selectedArea', // 区ごとに見出しを変える
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ), // 太字
+          ), // Text終わり
+          const SizedBox(height: 6), // 間隔
           Text(
             lang == UiLang.ja
-                ? '※ 1/1〜1/3 は 収集がありません（色・アイコンも表示しません）'
-                : '* No collection on Jan 1–3 (no color/icon).',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
-          if (disableWeekendCollection) ...[
-            const SizedBox(height: 4),
-            Text(
-              lang == UiLang.ja
-                  ? '※ 土日は収集なしとして扱います'
-                  : '* Weekends are treated as no-collection.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-          ],
-          const SizedBox(height: 12),
-
+                ? '※ 1/1〜1/3 は 収集がありません'
+                : '* No collection on Jan 1–3 (no color/icon).', // 固定除外日の説明
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700), // 小さめ
+          ), // Text終わり
+          const SizedBox(height: 12), // 間隔
           ...order.map((type) {
-            final it = itemMap[type]!;
-            final title = (lang == UiLang.ja) ? it.titleJa : it.titleEn;
-            final note = (lang == UiLang.ja) ? it.noteJa : it.noteEn;
-            final typeRules = grouped[type] ?? const <GarbageRule>[];
+            final it = itemMap[type]!; // 種別に対応する説明データ
+            final title = (lang == UiLang.ja) ? it.titleJa : it.titleEn; // タイトル
+            final note = (lang == UiLang.ja) ? it.noteJa : it.noteEn; // 注意点
+            final typeRules =
+                grouped[type] ?? const <GarbageRule>[]; // この種別のルール
             return _typeCard(
               type: type,
               title: title,
               note: note,
               typeRules: typeRules,
-            );
+            ); // 種別カード
           }),
-
           Text(
             lang == UiLang.ja
                 ? '※実際の分別・出し方は自治体の案内が最優先です。'
-                : '*Local municipality rules take precedence.*',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
-        ],
-      ),
-    );
+                : '*Local municipality rules take precedence.*', // 注意書き
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700), // 小さめ
+          ), // Text終わり
+        ], // children終わり
+      ), // Column終わり
+    ); // Container終わり
   } // build終わり
 } // _GarbageGuidePanel終わり
 
 class _GarbageGuideItem {
-  final GarbageType type;
-  final String titleJa;
-  final String titleEn;
-  final String noteJa;
-  final String noteEn;
+  // 種別ごとの説明データ（カード本文に使う）
+  final GarbageType type; // 種別
+  final String titleJa; // 日本語タイトル
+  final String titleEn; // 英語タイトル
+  final String noteJa; // 日本語注意点
+  final String noteEn; // 英語注意点
 
   const _GarbageGuideItem({
-    required this.type,
-    required this.titleJa,
-    required this.titleEn,
-    required this.noteJa,
-    required this.noteEn,
-  });
+    required this.type, // 種別
+    required this.titleJa, // 日本語
+    required this.titleEn, // 英語
+    required this.noteJa, // 日本語注意点
+    required this.noteEn, // 英語注意点
+  }); // コンストラクタ終わり
 } // _GarbageGuideItem終わり
 
-// ===========================
-// ★追加：重要なお知らせ（赤いカード）
-// ===========================
+// =========================== // セクション区切り
+// ★追加：赤いカード「重要なお知らせ」 // 区ごとに内容が変わる想定
+// =========================== // セクション区切り
 
 class _ImportantNoticeCard extends StatelessWidget {
-  final UiLang lang; // 言語（将来拡張用）
-  final String selectedArea; // 区（見出し用）
-  final List<String> lines; // 表示行
+  final UiLang lang; // 表示言語（今回は日本語中心だが将来拡張用）
+  final String selectedArea; // 選択中の区（見出し用）
+  final List<String> items; // 表示する箇条書き
 
   const _ImportantNoticeCard({
-    required this.lang,
-    required this.selectedArea,
-    required this.lines,
+    required this.lang, // 言語
+    required this.selectedArea, // 区名
+    required this.items, // 内容
   }); // コンストラクタ終わり
 
   @override
@@ -1463,379 +1473,368 @@ class _ImportantNoticeCard extends StatelessWidget {
       width: double.infinity, // 横幅いっぱい
       padding: const EdgeInsets.all(12), // 余白
       decoration: BoxDecoration(
-        color: const Color(0xFFFFEBEE), // 薄い赤背景
+        color: const Color(0xFFFFEBEE), // ★薄い赤（重要を強調）
         borderRadius: BorderRadius.circular(12), // 角丸
-        border: Border.all(color: const Color(0xFFFFCDD2)), // 赤系枠線
+        border: Border.all(color: const Color(0xFFFFCDD2)), // 赤系の枠線
       ), // decoration終わり
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
         children: [
-          Text(
-            lang == UiLang.ja
-                ? '重要なお知らせ（$selectedArea）'
-                : 'Important Notice ($selectedArea)',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          ...lines.map(
-            (s) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(s),
-            ),
-          ), // 行を縦に表示
-        ],
-      ),
-    );
+          Row(
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Color(0xFFD32F2F),
+                size: 20,
+              ), // 注意アイコン
+              const SizedBox(width: 8), // 間隔
+              Expanded(
+                child: Text(
+                  lang == UiLang.ja
+                      ? '重要なお知らせ（$selectedArea）'
+                      : 'Important notice ($selectedArea)', // 見出し
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ), // 太字
+                ), // Text終わり
+              ), // Expanded終わり
+            ], // children終わり
+          ), // Row終わり
+          const SizedBox(height: 8), // 間隔
+          ...items.map(
+            (t) => Padding(
+              padding: const EdgeInsets.only(bottom: 6), // 行間
+              child: Text('・$t', style: const TextStyle(fontSize: 13)), // 箇条書き
+            ), // Padding終わり
+          ), // map展開終わり
+        ], // children終わり
+      ), // Column終わり
+    ); // Container終わり
   } // build終わり
 } // _ImportantNoticeCard終わり
 
-// ===========================
-// ★追加：お問い合わせ（青いカード）— []内をグレー表示
-// ===========================
-
-class _InquiryInfo {
-  final String centerName; // センター名
-  final String phone; // 電話番号
-  final String hoursWeekday; // 平日時間
-  final String hoursHoliday; // 土日祝時間
-  final String websiteLabel; // サイトラベル
-  final String websiteUrlText; // URL文字（実URLが無い場合の表示）
-
-  const _InquiryInfo({
-    required this.centerName,
-    required this.phone,
-    required this.hoursWeekday,
-    required this.hoursHoliday,
-    required this.websiteLabel,
-    required this.websiteUrlText,
-  }); // コンストラクタ終わり
-} // _InquiryInfo終わり
+// =========================== // セクション区切り
+// ★追加：青いカード「お問い合わせ」 // []内をグレー表示（RichText）
+// =========================== // セクション区切り
 
 class _InquiryCard extends StatelessWidget {
-  final UiLang lang; // 言語（将来拡張用）
-  final String selectedArea; // 区（見出し用）
-  final _InquiryInfo info; // 問い合わせ情報
+  final UiLang lang; // 表示言語（今回は日本語中心だが将来拡張用）
+  final String selectedArea; // 選択中の区（見出し用）
+  final List<String> lines; // 表示する行（[]を含める）
 
   const _InquiryCard({
-    required this.lang,
-    required this.selectedArea,
-    required this.info,
+    required this.lang, // 言語
+    required this.selectedArea, // 区名
+    required this.lines, // 内容
   }); // コンストラクタ終わり
 
-  TextSpan _line(String left, String bracketText, {TextStyle? leftStyle}) {
-    // 1行分のRichText（[]内のみグレー）
-    final grey = TextStyle(
-      color: Colors.grey.shade700,
-      fontWeight: FontWeight.bold,
-    ); // []内のグレー
-    return TextSpan(
-      children: [
-        TextSpan(text: left, style: leftStyle), // 左側テキスト
-        TextSpan(text: ' [', style: leftStyle), // 開き括弧
-        TextSpan(text: bracketText, style: grey), // []内（グレー）
-        TextSpan(text: ']', style: leftStyle), // 閉じ括弧
-      ],
-    );
-  } // _line終わり
+  List<TextSpan> _spansWithGrayBrackets(String text) {
+    // ★[]で囲まれた部分（ブラケット含む）をグレーにするTextSpan生成
+    final spans = <TextSpan>[]; // 出力Spanリスト
+    final reg = RegExp(r'\[[^\]]*\]'); // []部分を丸ごと抜き出す正規表現
+    int idx = 0; // 現在位置
+
+    for (final m in reg.allMatches(text)) {
+      if (m.start > idx) {
+        spans.add(TextSpan(text: text.substring(idx, m.start))); // 通常部分（デフォルト色）
+      } // if終わり
+      spans.add(
+        TextSpan(
+          text: text.substring(m.start, m.end), // []部分（ブラケット含む）
+          style: const TextStyle(color: Color(0xFF757575)), // ★グレー
+        ), // TextSpan終わり
+      ); // add終わり
+      idx = m.end; // 次の開始位置へ
+    } // for終わり
+
+    if (idx < text.length) {
+      spans.add(TextSpan(text: text.substring(idx))); // 末尾の通常部分
+    } // if終わり
+
+    return spans; // Span一覧を返す
+  } // _spansWithGrayBrackets終わり
 
   @override
   Widget build(BuildContext context) {
-    final baseStyle = TextStyle(
-      fontSize: 13,
-      color: Colors.blue.shade900,
-    ); // 基本文字色（青系）
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      width: double.infinity, // 横幅いっぱい
+      padding: const EdgeInsets.all(12), // 余白
       decoration: BoxDecoration(
-        color: const Color(0xFFE3F2FD), // 薄い青背景
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFBBDEFB)), // 青系枠線
-      ),
+        color: const Color(0xFFE3F2FD), // ★薄い青（問い合わせ）
+        borderRadius: BorderRadius.circular(12), // 角丸
+        border: Border.all(color: const Color(0xFFBBDEFB)), // 青系の枠線
+      ), // decoration終わり
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
         children: [
-          Text(
-            lang == UiLang.ja
-                ? 'お問い合わせ（$selectedArea）'
-                : 'Inquiry ($selectedArea)',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          RichText(
-            text: _line(
-              '${info.centerName} :',
-              info.phone,
-              leftStyle: baseStyle,
-            ),
-          ), // 電話
-          const SizedBox(height: 4),
-          RichText(
-            text: _line('受付時間 :', info.hoursWeekday, leftStyle: baseStyle),
-          ), // 平日
-          const SizedBox(height: 4),
-          RichText(
-            text: _line('', info.hoursHoliday, leftStyle: baseStyle),
-          ), // 土日祝
-          const SizedBox(height: 4),
-          RichText(
-            text: _line(
-              '${info.websiteLabel}',
-              info.websiteUrlText,
-              leftStyle: baseStyle,
-            ),
-          ), // 公式サイト
-        ],
-      ),
-    );
+          Row(
+            children: [
+              const Icon(
+                Icons.phone_in_talk_outlined,
+                color: Color(0xFF1565C0),
+                size: 20,
+              ), // 電話アイコン
+              const SizedBox(width: 8), // 間隔
+              Expanded(
+                child: Text(
+                  lang == UiLang.ja
+                      ? 'お問い合わせ（$selectedArea）'
+                      : 'Contact ($selectedArea)', // 見出し
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ), // 太字
+                ), // Text終わり
+              ), // Expanded終わり
+            ], // children終わり
+          ), // Row終わり
+          const SizedBox(height: 8), // 間隔
+
+          ...lines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 6), // 行間
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.black,
+                  ), // デフォルト（黒）
+                  children: _spansWithGrayBrackets(line), // ★[]だけグレーSpan
+                ), // TextSpan終わり
+              ), // RichText終わり
+            ), // Padding終わり
+          ), // map展開終わり
+        ], // children終わり
+      ), // Column終わり
+    ); // Container終わり
   } // build終わり
 } // _InquiryCard終わり
 
-// ===========================
-// ★追加：祝日の収集ポリシー（表示用）
-// ===========================
-
-enum HolidayPolicy {
-  collect, // 祝日も収集する
-  noCollect, // 祝日は収集しない
-  check, // 要確認（自治体情報確認）
-} // HolidayPolicy終わり
-
-String holidayPolicyText(HolidayPolicy p, UiLang lang) {
-  if (lang == UiLang.ja) {
-    switch (p) {
-      case HolidayPolicy.collect:
-        return '祝日：収集あり（通常どおり）';
-      case HolidayPolicy.noCollect:
-        return '祝日：収集なし';
-      case HolidayPolicy.check:
-        return '祝日：要確認（自治体の案内をご確認ください）';
-    }
-  } else {
-    switch (p) {
-      case HolidayPolicy.collect:
-        return 'Holidays: Collected (as usual)';
-      case HolidayPolicy.noCollect:
-        return 'Holidays: No collection';
-      case HolidayPolicy.check:
-        return 'Holidays: Please check local rules';
-    }
-  }
-} // holidayPolicyText終わり
-
-// ===========================
-// ★追加：グレーのカード「収集スケジュール」
-// - 平日収集：月〜金の曜日ごとの収集物（ルールから自動集計）
-// - 休収集日：収集が無い曜日（ルールから自動抽出）
-// - 祝日：収集があるか（区ごとの設定で表示）
-// ===========================
+// =========================== // セクション区切り
+// ★追加：グレーのカード「収集スケジュール」 // お問い合わせカードの下に表示
+// =========================== // セクション区切り
 
 class _CollectionScheduleCard extends StatelessWidget {
-  final UiLang lang; // 表示言語
-  final String selectedArea; // 区
-  final List<GarbageRule> rules; // ルール
-  final HolidayPolicy holidayPolicy; // 祝日ポリシー
-  final bool disableWeekendCollection; // 土日無効
+  // 区ごとの収集スケジュールを「曜日別」と「休収集日」「祝日対応」で表示するカード
+  final UiLang lang; // 表示言語（今回は日本語中心だが将来拡張用）
+  final String selectedArea; // 選択中の区（見出し用）
+  final List<GarbageRule> rules; // この区の収集ルール（週×曜日→種別）
+  final bool collectOnHolidays; // 祝日は収集するか（区ごとに設定）
 
   const _CollectionScheduleCard({
-    required this.lang,
-    required this.selectedArea,
-    required this.rules,
-    required this.holidayPolicy,
-    required this.disableWeekendCollection,
+    required this.lang, // 言語
+    required this.selectedArea, // 区名
+    required this.rules, // ルール一覧
+    required this.collectOnHolidays, // 祝日収集フラグ
   }); // コンストラクタ終わり
 
-  Map<int, List<GarbageType>> _typesByWeekday(List<GarbageRule> rules) {
-    final map = <int, List<GarbageType>>{}; // weekday0to6 → types
+  List<int> _weekdayOrderMonToSun() {
+    // ★月→日で表示したいので順番を固定する（内部は日=0..土=6だが表示は月始まり）
+    return const <int>[1, 2, 3, 4, 5, 6, 0]; // 月火水木金土日
+  } // _weekdayOrderMonToSun終わり
+
+  bool _isEveryWeek(Set<int> weeks) {
+    // 1〜5週が揃っていれば「毎週」扱いにする
+    return weeks.contains(1) &&
+        weeks.contains(2) &&
+        weeks.contains(3) &&
+        weeks.contains(4) &&
+        weeks.contains(5);
+  } // _isEveryWeek終わり
+
+  String _weeksText(Set<int> weeks) {
+    // 週セットを文字列化する（例：{1,3}→第1・第3 / 1st & 3rd）
+    final list = weeks.toList()..sort(); // ソートして順序安定化
+    if (_isEveryWeek(weeks))
+      return (lang == UiLang.ja) ? '毎週' : 'Every week'; // 毎週なら短く
+    if (lang == UiLang.ja)
+      return list.map((w) => weekLabel(w, lang)).join('・'); // 日本語
+    return list.map((w) => weekLabel(w, lang)).join(' & '); // 英語
+  } // _weeksText終わり
+
+  Map<GarbageType, Set<int>> _mergedTypeWeeksForWeekday(int weekday0to6) {
+    // ★同じ曜日に複数ルールがある場合、種別ごとに「週」を結合してまとめる
+    final map = <GarbageType, Set<int>>{}; // 種別→週セット
     for (final r in rules) {
-      if (disableWeekendCollection &&
-          (r.weekday0to6 == 0 || r.weekday0to6 == 6)) {
-        continue; // 土日無効なら土日ルールは集計から除外
-      }
-      map
-          .putIfAbsent(r.weekday0to6, () => <GarbageType>[])
-          .add(r.type); // 曜日キーに追加
-    }
-    return map;
-  } // _typesByWeekday終わり
+      if (r.weekday0to6 != weekday0to6) continue; // 対象曜日だけ
+      map.putIfAbsent(r.type, () => <int>{}).addAll(r.weeks); // 種別ごとに週を結合
+    } // for終わり
+    return map; // まとめたMap
+  } // _mergedTypeWeeksForWeekday終わり
 
-  String _weekdayText(int wd0to6) {
-    final wd = weekdayLabel0to6(wd0to6, lang); // 0..6→文字
-    return (lang == UiLang.ja) ? '${wd}曜日' : wd; // 日本語は「曜日」付き
-  } // _weekdayText終わり
+  List<String> _weekdayLineItems(int weekday0to6) {
+    // ★「曜日の横に表示する収集物」を文字列リストで返す（複数対応）
+    final merged = _mergedTypeWeeksForWeekday(weekday0to6); // 種別→週セット
+    final wdText = weekdayLabel0to6(weekday0to6, lang); // 曜日ラベル（例：月）
+    final types = merged.keys.toList(); // 種別一覧
 
-  String _typesText(List<GarbageType> types) {
-    if (types.isEmpty) return (lang == UiLang.ja) ? 'なし' : 'None'; // なし表示
-    return types
-        .map((t) => garbageLabel(t, lang))
-        .join(lang == UiLang.ja ? '／' : ' / '); // 種別名を連結
-  } // _typesText終わり
+    types.sort((a, b) {
+      final ia = garbageTypeDisplayOrder.indexOf(a); // aの順位
+      final ib = garbageTypeDisplayOrder.indexOf(b); // bの順位
+      return ia.compareTo(ib); // 順位比較
+    }); // sort終わり
+
+    final out = <String>[]; // 出力
+    for (final t in types) {
+      final label = garbageLabel(t, lang); // 種別名
+      final weeks = merged[t] ?? <int>{}; // 週セット
+      if (_isEveryWeek(weeks)) {
+        out.add(label); // 毎週なら「燃えるゴミ」だけ
+      } else {
+        final wText = _weeksText(weeks); // 例：第2 / 第1・第3
+        out.add(
+          lang == UiLang.ja
+              ? '$label($wText$wdText)'
+              : '$label($wText $wdText)',
+        ); // ★()内に「どの週の何曜日」
+      } // if/else終わり
+    } // for終わり
+
+    return out; // 空ならその曜日は収集なし
+  } // _weekdayLineItems終わり
+
+  List<int> _noCollectionWeekdays() {
+    // ★ルールが1件も無い曜日を「休収集日」として抽出する
+    final noDays = <int>[]; // 休収集日の曜日
+    for (final wd in const <int>[0, 1, 2, 3, 4, 5, 6]) {
+      final items = _weekdayLineItems(wd); // 曜日ごとの収集物
+      if (items.isEmpty) noDays.add(wd); // 何も無ければ休収集日
+    } // for終わり
+    return noDays; // 休収集日一覧
+  } // _noCollectionWeekdays終わり
+
+  Widget _sectionTitle(String text) {
+    // セクション見出しの見た目を統一する
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+    ); // 太字小さめ
+  } // _sectionTitle終わり
 
   @override
   Widget build(BuildContext context) {
-    final byWd = _typesByWeekday(rules); // 曜日→種別（未正規化）
-
-    List<GarbageType> typesForWeekday(int wd0to6) {
-      if (disableWeekendCollection && (wd0to6 == 0 || wd0to6 == 6)) {
-        return const <GarbageType>[]; // 土日は収集なし表示
-      }
-      final raw = byWd[wd0to6] ?? const <GarbageType>[]; // 無ければ空
-      return normalizeTypes(raw); // 重複除去＆順序安定化
-    } // typesForWeekday終わり
-
-    final weekdayList = <int>[1, 2, 3, 4, 5]; // 平日：月(1)〜金(5)
-    final allDays = <int>[0, 1, 2, 3, 4, 5, 6]; // 全曜日：日(0)〜土(6)
-
-    final restDays = <int>[
-      for (final wd in allDays)
-        if (typesForWeekday(wd).isEmpty) wd, // その曜日が空なら休収集日
-    ]; // restDays終わり
+    final order = _weekdayOrderMonToSun(); // 月→日の表示順
+    final restDays = _noCollectionWeekdays(); // 休収集日の曜日一覧
+    final grayText = TextStyle(
+      fontSize: 12,
+      color: Colors.grey.shade700,
+    ); // 注釈用
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      width: double.infinity, // 横幅いっぱい
+      padding: const EdgeInsets.all(12), // 余白
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F2), // 薄いグレー
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-      ),
+        color: const Color(0xFFF2F3F5), // ★薄いグレー背景
+        borderRadius: BorderRadius.circular(12), // 角丸
+        border: Border.all(color: const Color(0xFFE1E5EE)), // 枠線
+      ), // decoration終わり
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
         children: [
           Row(
             children: [
               const Icon(
                 Icons.calendar_month,
-                color: Color(0xFF616161),
                 size: 20,
-              ),
-              const SizedBox(width: 8),
+                color: Color(0xFF616161),
+              ), // カレンダーアイコン
+              const SizedBox(width: 8), // 間隔
               const Expanded(
                 child: Text(
                   '収集スケジュール',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-              ),
+                ), // 見出し
+              ), // Expanded終わり
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ), // 余白
                 decoration: BoxDecoration(
-                  color: const Color(0xFF616161).withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(999),
-                ),
+                  color: Colors.black.withOpacity(0.06), // 薄いグレー
+                  borderRadius: BorderRadius.circular(999), // 丸チップ
+                ), // decoration終わり
                 child: Text(
-                  selectedArea,
+                  selectedArea, // 区名
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF616161),
                     fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
+                    color: Color(0xFF424242),
+                  ), // 濃グレー
+                ), // Text終わり
+              ), // Container終わり
+            ], // children終わり
+          ), // Row終わり
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 6), // 間隔
+          Text('※ 1/1〜1/3 は収集なし（色/アイコン表示なし）', style: grayText), // 固定除外日の注釈
+          const SizedBox(height: 12), // 間隔
 
-          Text(
-            lang == UiLang.ja ? '平日収集' : 'Weekday collections',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
+          _sectionTitle('平日収集'), // 見出し
+          const SizedBox(height: 6), // 間隔
 
-          ...weekdayList.map((wd) {
-            final types = typesForWeekday(wd); // その曜日の種別（複数可）
+          ...order.map((wd) {
+            final wdLabel = weekdayLabel0to6(wd, lang); // 曜日ラベル
+            final items = _weekdayLineItems(wd); // 収集物
+            final rightText = items.isEmpty
+                ? '—'
+                : items.join(' / '); // 複数は区切り表示
             return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 6), // 行間
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start, // 上寄せ
                 children: [
                   SizedBox(
-                    width: 72,
+                    width: 56, // 左の曜日欄幅
                     child: Text(
-                      _weekdayText(wd),
+                      '$wdLabel曜日',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
+                    ), // 曜日
+                  ), // SizedBox終わり
+                  const SizedBox(width: 8), // 間隔
                   Expanded(
                     child: Text(
-                      _typesText(types),
+                      rightText,
                       style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            );
+                    ), // 収集物
+                  ), // Expanded終わり
+                ], // children終わり
+              ), // Row終わり
+            ); // Padding終わり
           }),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 10), // 間隔
 
-          Text(
-            lang == UiLang.ja ? '休収集日' : 'No collection days',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
+          _sectionTitle('休収集日'), // 見出し
+          const SizedBox(height: 6), // 間隔
 
           if (restDays.isEmpty)
-            Text(
-              lang == UiLang.ja
-                  ? 'なし（毎日いずれかの収集あり）'
-                  : 'None (collections exist every day)',
-              style: const TextStyle(fontSize: 13),
-            )
+            const Text('なし', style: TextStyle(fontSize: 13)) // 休収集日なし
           else
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final wd in restDays)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFDDDDDD)),
-                    ),
-                    child: Text(
-                      _weekdayText(wd),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF616161),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            Text(
+              restDays
+                  .map((wd) => '${weekdayLabel0to6(wd, lang)}曜日')
+                  .join('・'), // 曜日列挙
+              style: const TextStyle(fontSize: 13), // 標準
+            ), // Text終わり
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 10), // 間隔
+
+          _sectionTitle('祝日の収集'), // 見出し
+          const SizedBox(height: 6), // 間隔
 
           Text(
-            lang == UiLang.ja ? '祝日の収集' : 'Holiday collections',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            holidayPolicyText(holidayPolicy, lang),
-            style: const TextStyle(fontSize: 13),
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            lang == UiLang.ja
-                ? '※この表示は「週×曜日ルール」から曜日ごとに集計した結果です（第2水なども含みます）。'
-                : '*This view aggregates weekday types from rules (includes 2nd Wed etc.).',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
-        ],
-      ),
-    );
+            collectOnHolidays
+                ? '祝日も通常どおり収集します（※年末年始など一部例外あり）'
+                : '祝日は収集しません', // フラグで切替
+            style: const TextStyle(fontSize: 13), // 標準
+          ), // Text終わり
+        ], // children終わり
+      ), // Column終わり
+    ); // Container終わり
   } // build終わり
 } // _CollectionScheduleCard終わり
