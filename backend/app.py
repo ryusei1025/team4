@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
 from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 import os
@@ -15,7 +15,7 @@ import json # AI診断の結果を処理するために必要
 load_dotenv()
 
 # Flaskアプリ（サーバー本体）を作成します
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static_web')
 
 # 日本語の文字化けを防ぐための設定です
 app.json.ensure_ascii = False
@@ -36,6 +36,28 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
+
+# ---------------------------------------------------------
+# ▼変更点2：ここから下に新しいルートを追加（AIの処理より前に書くのが安全）
+# ---------------------------------------------------------
+
+# ルートURL（/）にアクセスしたら、Flutterの画面を返す
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
+
+# その他のファイル（JS, CSS, 画像など）を返す
+@app.route('/<path:path>')
+def serve_static_files(path):
+    file_path = os.path.join(app.static_folder, path)
+    if os.path.exists(file_path):
+        return send_from_directory(app.static_folder, path)
+    # ファイルがない場合はindex.htmlを返す（Flutterの画面遷移用）
+    return send_from_directory(app.static_folder, 'index.html')
+
+# ---------------------------------------------------------
+# ▲変更点2 ここまで
+# ---------------------------------------------------------
 
 # ------------------------------------------------------------------
 # 2. APIの窓口（ルート）定義
