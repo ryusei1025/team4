@@ -20,9 +20,13 @@ dependencies:
   # iOS風アイコン
   cupertino_icons: ^1.0.8
   timezone: ^0.9.4
+  csv: ^6.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/schedules.csv
