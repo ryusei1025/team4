@@ -1,4 +1,3 @@
-// import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'drawer_menu.dart';
@@ -46,9 +45,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _pageController = PageController(
       initialPage: initialIndex.clamp(0, totalMonths - 1),
     );
-
-    // ★JSON読み込み
-    // _loadExamplesFromJson();
   }
 
   @override
@@ -102,10 +98,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      // 背景をグラデーションにするためScaffold自体の色は透明にする
+      backgroundColor: Colors.transparent,
       drawer: LeftMenuDrawer(lang: _lang, selectedArea: _selectedArea),
       appBar: AppBar(
         centerTitle: true,
+        backgroundColor: const Color.fromARGB(
+          255,
+          0,
+          221,
+          192,
+        ).withOpacity(0.8), // 少し透けさせて馴染ませる
         leading: Builder(
           builder: (ctx) => IconButton(
             icon: const Icon(Icons.menu),
@@ -130,104 +133,130 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE1E5EE)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _LabeledDropdown<int>(
-                              label: '年',
-                              value: _pickedYear,
-                              items: List.generate(
-                                maxYear - baseYear + 1,
-                                (i) => baseYear + i,
-                              ),
-                              itemLabel: (v) => '$v',
-                              onChanged: (v) {
-                                setState(() => _pickedYear = v);
-                                _goToPickedMonth();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _LabeledDropdown<int>(
-                              label: '月',
-                              value: _pickedMonth,
-                              items: List.generate(12, (i) => i + 1),
-                              itemLabel: (v) => '$v',
-                              onChanged: (v) {
-                                setState(() => _pickedMonth = v);
-                                _goToPickedMonth();
-                              },
-                            ),
-                          ),
-                        ],
+      body: Container(
+        // ★ グラデーション背景の適用
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.fromARGB(255, 250, 250, 227), // #ffffe0
+              Color.fromARGB(255, 199, 228, 199), // #f0fff0
+            ],
+          ),
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9), // 背景に合わせて少し透過
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: const Color.fromARGB(255, 200, 188, 243),
                       ),
-                      const SizedBox(height: 8),
-                      AspectRatio(
-                        aspectRatio: 7 / 7,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFCED6E6)),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(
-                            children: [
-                              _WeekdayRow(lang: _lang),
-                              Expanded(
-                                child: Listener(
-                                  onPointerSignal: _handlePointerSignal,
-                                  child: PageView.builder(
-                                    controller: _pageController,
-                                    scrollDirection: Axis.vertical,
-                                    itemCount: totalMonths,
-                                    onPageChanged: (index) {
-                                      final m = _monthFromIndex(index);
-                                      setState(() {
-                                        _visibleYear = m.year;
-                                        _visibleMonth = m.month;
-                                        _pickedYear = m.year;
-                                        _pickedMonth = m.month;
-                                      });
-                                    },
-                                    itemBuilder: (context, index) {
-                                      final month = _monthFromIndex(index);
-                                      return _MonthGrid(
-                                        month: month,
-                                        selectedDate: _selectedDate,
-                                        onDateTap: (d) =>
-                                            _onDateTap(d, currentMonth: month),
-                                      );
-                                    },
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _LabeledDropdown<int>(
+                                label: '年',
+                                value: _pickedYear,
+                                items: List.generate(
+                                  maxYear - baseYear + 1,
+                                  (i) => baseYear + i,
+                                ),
+                                itemLabel: (v) => '$v',
+                                onChanged: (v) {
+                                  setState(() => _pickedYear = v);
+                                  _goToPickedMonth();
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _LabeledDropdown<int>(
+                                label: '月',
+                                value: _pickedMonth,
+                                items: List.generate(12, (i) => i + 1),
+                                itemLabel: (v) => '$v',
+                                onChanged: (v) {
+                                  setState(() => _pickedMonth = v);
+                                  _goToPickedMonth();
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        AspectRatio(
+                          aspectRatio: 7 / 7,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFCED6E6),
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              children: [
+                                _WeekdayRow(lang: _lang),
+                                Expanded(
+                                  child: Listener(
+                                    onPointerSignal: _handlePointerSignal,
+                                    child: PageView.builder(
+                                      controller: _pageController,
+                                      scrollDirection: Axis.vertical,
+                                      itemCount: totalMonths,
+                                      onPageChanged: (index) {
+                                        final m = _monthFromIndex(index);
+                                        setState(() {
+                                          _visibleYear = m.year;
+                                          _visibleMonth = m.month;
+                                          _pickedYear = m.year;
+                                          _pickedMonth = m.month;
+                                        });
+                                      },
+                                      itemBuilder: (context, index) {
+                                        final month = _monthFromIndex(index);
+                                        return _MonthGrid(
+                                          month: month,
+                                          selectedDate: _selectedDate,
+                                          onDateTap: (d) => _onDateTap(
+                                            d,
+                                            currentMonth: month,
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                _SelectedInfoCard(selectedDate: _selectedDate, lang: _lang),
-              ],
+                  const SizedBox(height: 12),
+                  _SelectedInfoCard(selectedDate: _selectedDate, lang: _lang),
+                ],
+              ),
             ),
           ),
         ),
@@ -236,7 +265,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-// 以下、補助ウィジェット（Dropdown, WeekdayRow, MonthGrid, InfoCard）は省略せずに含めてください
+// --- 補助ウィジェット ---
+
 class _HeaderDropdown<T> extends StatelessWidget {
   final String label;
   final T value;
@@ -260,7 +290,7 @@ class _HeaderDropdown<T> extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border.all(color: const Color(0xFFE1E5EE)),
           borderRadius: BorderRadius.circular(10),
-          color: const Color(0xFFE7EBF3),
+          color: const Color(0xFFE7EBF3).withOpacity(0.9),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -310,6 +340,8 @@ class _LabeledDropdown<T> extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         isDense: true,
+        filled: true,
+        fillColor: Colors.white,
         border: const OutlineInputBorder(),
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
@@ -343,6 +375,7 @@ class _WeekdayRow extends StatelessWidget {
     return Container(
       height: 40,
       decoration: const BoxDecoration(
+        color: Color(0xFFF8F9FB),
         border: Border(bottom: BorderSide(color: Color(0xFFE7EBF3))),
       ),
       child: Row(
@@ -410,7 +443,7 @@ class _MonthGrid extends StatelessWidget {
                       decoration: BoxDecoration(
                         border: Border.all(color: const Color(0xFFF0F0F0)),
                         color: isSelected
-                            ? Colors.blue.withOpacity(0.1)
+                            ? Colors.green.withOpacity(0.2) // グラデーションに合わせて緑系に
                             : Colors.transparent,
                       ),
                       child: InkWell(
@@ -445,33 +478,43 @@ class _SelectedInfoCard extends StatelessWidget {
   const _SelectedInfoCard({required this.selectedDate, required this.lang});
   @override
   Widget build(BuildContext context) {
-    if (selectedDate == null)
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(lang == UiLang.ja ? '日付を選択してください' : 'Please select a date'),
-      );
+    String message = lang == UiLang.ja ? '日付を選択してください' : 'Please select a date';
+    if (selectedDate != null) {
+      // ここに実際のごみ収集ロジックを入れる想定
+      message = 'この日は燃えるゴミの日です';
+    }
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withOpacity(0.9),
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${selectedDate!.year}/${selectedDate!.month}/${selectedDate!.day}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          const Text('この日は燃えるゴミの日です'),
         ],
       ),
+      child: selectedDate == null
+          ? Text(message, style: const TextStyle(color: Colors.grey))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${selectedDate!.year}/${selectedDate!.month}/${selectedDate!.day}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(message, style: const TextStyle(fontSize: 16)),
+              ],
+            ),
     );
   }
 }

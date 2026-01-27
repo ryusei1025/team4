@@ -42,10 +42,21 @@ class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        setState(() {
-          _items = json.decode(utf8.decode(response.bodyBytes));
-          _isLoading = false;
+        List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+
+        // ★ あいうえお順にソート（昇順）
+        data.sort((a, b) {
+          String nameA = (a['name'] ?? '').toString();
+          String nameB = (b['name'] ?? '').toString();
+          return nameA.compareTo(nameB);
         });
+
+        if (mounted) {
+          setState(() {
+            _items = json.decode(utf8.decode(response.bodyBytes));
+            _isLoading = false;
+          });
+        }
       } else {
         setState(() {
           _isLoading = false;

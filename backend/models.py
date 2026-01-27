@@ -33,9 +33,7 @@ class Area(db.Model):
             "calendar_no": self.calendar_no
         }
     
-    # ★スマホ用：言語コードを受け取って、その国の言葉で返す
     def get_localized_name(self, lang_code):
-        # 指定された言語のカラムを探す (例: name_en)
         target_name = getattr(self, f'name_{lang_code}', None)
         return target_name if target_name else self.name_ja
 
@@ -47,6 +45,7 @@ class User(db.Model):
     area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
     language = db.Column(db.String(5), default='ja')
     created_at = db.Column(db.DateTime, default=datetime.now)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -60,7 +59,6 @@ class TrashType(db.Model):
     __tablename__ = 'trash_types'
     id = db.Column(db.Integer, primary_key=True)
     
-    # 7ヶ国語対応
     name_ja = db.Column(db.String(50), nullable=False)
     name_en = db.Column(db.String(50))
     name_zh_cn = db.Column(db.String(50))
@@ -69,8 +67,8 @@ class TrashType(db.Model):
     name_ru = db.Column(db.String(50))
     name_id = db.Column(db.String(50))
 
-    color_code = db.Column(db.String(7))   # #FF0000 など
-    icon_name = db.Column(db.String(50))   # Flutter側のアイコン名
+    color_code = db.Column(db.String(7))
+    icon_name = db.Column(db.String(50))
 
     def to_dict(self):
         return {
@@ -80,7 +78,6 @@ class TrashType(db.Model):
             "icon": self.icon_name
         }
 
-    # ★スマホ用：指定言語の名前を返す
     def get_localized_name(self, lang_code):
         target_name = getattr(self, f'name_{lang_code}', None)
         return target_name if target_name else self.name_ja
@@ -93,23 +90,23 @@ class Schedule(db.Model):
     trash_type_id = db.Column(db.Integer, db.ForeignKey('trash_types.id'), nullable=False)
     date = db.Column(db.Date, nullable=False) 
 
-    # リレーション設定
     trash_type = db.relationship('TrashType', backref='schedules')
+
     def to_dict(self):
         return {
             "id": self.id,
-            "date": self.date.strftime('%Y-%m-%d'), # 日付を文字列に変換
+            "date": self.date.strftime('%Y-%m-%d'),
             "area_id": self.area_id,
-            "trash_type": self.trash_type.to_dict() # 関連するゴミ情報を埋め込む
+            "trash_type": self.trash_type.to_dict()
         }
 
-# 5. ゴミ分別辞書
+# 5. ゴミ分別辞書 (TrashDictionary)
 class TrashDictionary(db.Model):
     __tablename__ = 'trash_dictionaries'
     id = db.Column(db.Integer, primary_key=True)
     
-    # --- 品目名 (7ヶ国語) ---
     name_ja = db.Column(db.String(255), nullable=False)
+    name_kana = db.Column(db.String(255)) # ★自動ソート用に追加
     name_en = db.Column(db.String(255))
     name_zh_cn = db.Column(db.String(255))
     name_ko = db.Column(db.String(255))
@@ -117,7 +114,6 @@ class TrashDictionary(db.Model):
     name_ru = db.Column(db.String(255))
     name_id = db.Column(db.String(255))
 
-    # --- 備考・出し方 (7ヶ国語) ---
     note_ja = db.Column(db.Text)
     note_en = db.Column(db.Text)
     note_zh_cn = db.Column(db.Text)
@@ -126,13 +122,12 @@ class TrashDictionary(db.Model):
     note_ru = db.Column(db.Text)
     note_id = db.Column(db.Text)
 
-    fee = db.Column(db.String(100)) # 手数料 (とりあえず共通)
+    fee = db.Column(db.String(100))
     trash_type_id = db.Column(db.Integer, db.ForeignKey('trash_types.id'), nullable=True)
 
-    # リレーション
     trash_type = db.relationship('TrashType', backref='dictionaries')
 
-    # ★スマホ用：言語コードを受け取って、その国の言葉で返す魔法のメソッド
+    # ★Flutter用：言語コードを受け取って、その国の言葉で返す魔法のメソッド
     def get_localized_data(self, lang_code):
         # 1. 名前と言語の取得
         target_name = getattr(self, f'name_{lang_code}', None)
@@ -146,9 +141,11 @@ class TrashDictionary(db.Model):
         return {
             "id": self.id,
             "name": target_name if target_name else self.name_ja, # なければ日本語
+            "kana": self.name_kana, # Flutter側でソート順として利用可能
             "note": target_note if target_note else self.note_ja,
             "fee": self.fee,
-            "trash_type_name": type_name
+            "trash_type_name": type_name,
+            "trash_type_id": self.trash_type_id
         }
 
 # 6. ゴミ箱マップ (TrashBin)
@@ -159,12 +156,14 @@ class TrashBin(db.Model):
     address = db.Column(db.String(255))              # 住所
     
     # ★重要: CSVにまだ緯度経度がないため、nullable=True (空でもOK) に変更
-    latitude = db.Column(db.Float, nullable=True)
-    longitude = db.Column(db.Float, nullable=True)
+    latitude = db.Column(db.Float, nullable=True)    # 緯度
+    longitude = db.Column(db.Float, nullable=True)   # 経度
     
-    bin_type = db.Column(db.String(255)) # 対象品目 (回収形態)
-    note = db.Column(db.Text)            # 備考 + 利用可能時間など
+    bin_type = db.Column(db.String(255))             # 種類（ペットボトル、空き缶など）
+    note = db.Column(db.Text)                        # 備考
+
     def to_dict(self):
+        # 全ての項目を返します
         return {
             "id": self.id,
             "name": self.name,

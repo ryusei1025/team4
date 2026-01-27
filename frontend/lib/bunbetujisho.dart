@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'dart:async'; // タイマー用に追加
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'drawer_menu.dart';
 import 'category_items_screen.dart';
@@ -15,37 +15,119 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   UiLang _lang = UiLang.ja;
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
-  List<dynamic> _trashItems = [];
+  final ScrollController _scrollController = ScrollController();
+
+  List<dynamic> _trashItems = []; // サーバーからの検索結果を格納
+  List<dynamic> _groupedTrashList = []; // 初期表示用の50音リスト
   bool _isLoading = false;
-  String _errorMessage = '';
-  Timer? _debounce; // 通信安定化用のタイマー
+  Timer? _debounce;
 
   final String _baseUrl = 'http://10.0.2.2:5000';
 
   @override
   void initState() {
     super.initState();
-    _fetchTrashData(query: '');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusNode.requestFocus();
-    });
+    _fetchDictionary(); // 最初の「あかさたな」リストを取得
   }
 
   @override
   void dispose() {
-    _debounce?.cancel(); // タイマーの破棄
-    _focusNode.dispose();
+    _debounce?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  // IDから名前を判定（ご提示の7カテゴリ版）
-  String _getTrashTypeName(dynamic item) {
-    final id = int.tryParse(item['trash_type_id']?.toString() ?? '') ?? 0;
-    final String fallbackName =
-        item['trash_type_name'] ?? item['trash_type'] ?? '不明';
+  // 初期リスト取得
+  Future<void> _fetchDictionary() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final String langCode = _lang == UiLang.ja ? 'ja' : 'en';
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/trash_dictionary?lang=$langCode'))
+          .timeout(const Duration(seconds: 10));
 
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        if (mounted) {
+          setState(() {
+            _groupedTrashList = data;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          _isLoading = false;
+        });
+    }
+  }
+
+  // --- ★ サーバーのDB(name_kana)に対して検索をかける関数 ---
+  Future<void> _fetchTrashData(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _trashItems = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      // サーバーの /api/trash_search にクエリを送る
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/trash_search?q=${Uri.encodeComponent(query)}'),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _trashItems = json.decode(utf8.decode(response.bodyBytes));
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String text) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _fetchTrashData(text); // 入力が止まって500ms後にDB検索実行
+    });
+  }
+
+  // インデックスジャンプ（初期リスト用）
+  void _jumpToSection(String header) {
+    int targetIndex = _groupedTrashList.indexWhere(
+      (group) => group['header'] == header,
+    );
+    if (targetIndex != -1) {
+      double offset = 0;
+      for (int i = 0; i < targetIndex; i++) {
+        offset += 40.0;
+        offset += (_groupedTrashList[i]['items'] as List).length * 80.0;
+      }
+      _scrollController.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  String _getTrashTypeName(dynamic item) {
+    final String serverName =
+        item['trash_type'] ?? item['trash_type_name'] ?? '不明';
+    final id = int.tryParse(item['trash_type_id']?.toString() ?? '') ?? 0;
     switch (id) {
       case 1:
         return '燃やせるごみ';
@@ -62,11 +144,10 @@ class _SearchScreenState extends State<SearchScreen> {
       case 7:
         return 'スプレー缶・電池';
       default:
-        return fallbackName == '不明' ? '不明' : fallbackName;
+        return serverName;
     }
   }
 
-  // IDから色を判定（ご提示のカラー設定版）
   Color _getTrashColor(dynamic item) {
     final id = int.tryParse(item['trash_type_id']?.toString() ?? '') ?? 0;
     switch (id) {
@@ -89,13 +170,165 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // 詳細モーダル表示（ご提示の多機能版）
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      drawer: LeftMenuDrawer(lang: _lang, selectedArea: '札幌市'),
+      appBar: AppBar(title: const Text('分別辞書検索')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+          ),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'ゴミの名前で検索...',
+                  prefixIcon: const Icon(Icons.search, color: Colors.green),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.85),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: _onSearchChanged, // DB検索をトリガー
+              ),
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  if (_searchController.text.isEmpty &&
+                      _groupedTrashList.isNotEmpty)
+                    _buildIndexBar(),
+
+                  Expanded(
+                    child: _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.green,
+                            ),
+                          )
+                        : _searchController.text.isEmpty
+                        ? _buildGroupedList()
+                        : _buildSearchResultList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIndexBar() {
+    final headers = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ"];
+    return Container(
+      width: 45,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        border: Border(right: BorderSide(color: Colors.green.withOpacity(0.1))),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: headers
+            .map(
+              (h) => GestureDetector(
+                onTap: () => _jumpToSection(h),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    h,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade900,
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildGroupedList() {
+    return ListView.builder(
+      controller: _scrollController,
+      itemCount: _groupedTrashList.length,
+      itemBuilder: (context, index) {
+        final group = _groupedTrashList[index];
+        final String header = group['header'] ?? '';
+        final List<dynamic> items = group['items'] ?? [];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(
+                left: 16.0,
+                top: 12.0,
+                bottom: 4.0,
+              ),
+              child: Text(
+                header,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            ...items.map((item) => _buildItemCard(item)).toList(),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchResultList() {
+    return ListView.builder(
+      itemCount: _trashItems.length,
+      itemBuilder: (context, index) => _buildItemCard(_trashItems[index]),
+    );
+  }
+
+  Widget _buildItemCard(dynamic item) {
+    return Card(
+      color: Colors.white.withOpacity(0.8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        onTap: () => _showDetail(item),
+        title: Text(
+          item['name'] ?? '',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          _getTrashTypeName(item),
+          style: TextStyle(
+            color: _getTrashColor(item),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right, size: 18),
+      ),
+    );
+  }
+
   void _showDetail(dynamic item) {
     final Color themeColor = _getTrashColor(item);
     final String typeName = _getTrashTypeName(item);
-    final String feeText = item['fee']?.toString() ?? '無料';
-    final bool isFree = feeText.contains('無料') || feeText == '0';
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -142,21 +375,17 @@ class _SearchScreenState extends State<SearchScreen> {
                     final int tid =
                         int.tryParse(item['trash_type_id']?.toString() ?? '') ??
                         0;
-                    if (tid == 0) return;
-                    Navigator.of(context).pop();
-                    Future.delayed(const Duration(milliseconds: 150), () {
-                      if (!mounted) return;
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CategoryItemsScreen(
-                            trashTypeId: tid,
-                            typeName: typeName,
-                            themeColor: themeColor,
-                          ),
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CategoryItemsScreen(
+                          trashTypeId: tid,
+                          typeName: typeName,
+                          themeColor: themeColor,
                         ),
-                      );
-                    });
+                      ),
+                    );
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -190,39 +419,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
               const Divider(height: 40),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isFree ? Colors.green.shade50 : Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isFree
-                          ? Icons.check_circle_outline
-                          : Icons.payments_outlined,
-                      color: isFree ? Colors.green : Colors.orange,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        feeText,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isFree
-                              ? Colors.green.shade700
-                              : Colors.orange.shade900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
               const Text(
-                '捨て方のポイント',
+                '出し方のポイント',
                 style: TextStyle(
                   color: Colors.grey,
                   fontSize: 14,
@@ -239,181 +437,6 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         );
       },
-    );
-  }
-
-  // 通信処理
-  Future<void> _fetchTrashData({String query = ''}) async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    try {
-      final String langCode = _lang == UiLang.ja ? 'ja' : 'en';
-      final response = await http
-          .get(
-            Uri.parse(
-              '$_baseUrl/api/trash_search?q=${Uri.encodeComponent(query)}&lang=$langCode',
-            ),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        if (mounted) {
-          setState(() {
-            _trashItems = data;
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted)
-          setState(() {
-            _isLoading = false;
-            _errorMessage = 'エラー: ${response.statusCode}';
-          });
-      }
-    } catch (e) {
-      if (mounted)
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'サーバーに接続できません';
-        });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      // DrawerとAppBarは統一デザインを維持
-      drawer: LeftMenuDrawer(lang: _lang, selectedArea: '札幌市'),
-      appBar: AppBar(
-        title: Text(
-          _lang == UiLang.ja ? '分別辞書検索' : 'Trash Search',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.language),
-            onPressed: () {
-              setState(() {
-                _lang = (_lang == UiLang.ja) ? UiLang.en : UiLang.ja;
-              });
-              _fetchTrashData(query: _searchController.text);
-            },
-          ),
-        ],
-      ),
-      body: Container(
-        // ★ 斜めグラデーション背景
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [
-              Color(0xFFE8F5E9), // 薄い緑
-              Color(0xFFC8E6C9), // 少し強めの緑
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            // 検索バー
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextField(
-                controller: _searchController,
-                focusNode: _focusNode,
-                decoration: InputDecoration(
-                  hintText: _lang == UiLang.ja ? 'ゴミの名前で検索...' : 'Search...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.85),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 0,
-                    horizontal: 16,
-                  ),
-                ),
-                // 文字入力のたびに少し待ってから検索（デバウンス）
-                onChanged: (text) {
-                  if (_debounce?.isActive ?? false) _debounce!.cancel();
-                  _debounce = Timer(const Duration(milliseconds: 500), () {
-                    _fetchTrashData(query: text);
-                  });
-                },
-              ),
-            ),
-            // 結果リスト
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.green),
-                    )
-                  : _errorMessage.isNotEmpty
-                  ? _buildErrorWidget()
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      itemCount: _trashItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _trashItems[index];
-                        return Card(
-                          color: Colors.white.withOpacity(0.8),
-                          elevation: 0.5,
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 6,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            onTap: () => _showDetail(item),
-                            title: Text(
-                              item['name'] ?? '',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              _getTrashTypeName(item),
-                              style: TextStyle(
-                                color: _getTrashColor(item),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.green,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(_errorMessage, style: const TextStyle(color: Colors.red)),
-          TextButton(
-            onPressed: () => _fetchTrashData(query: _searchController.text),
-            child: const Text('再試行'),
-          ),
-        ],
-      ),
     );
   }
 }

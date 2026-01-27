@@ -10,21 +10,14 @@ dependencies:
   # HTTP通信（Flaskサーバーとの連携用）
   http: ^1.2.0
   # カメラ・写真選択機能
-  image_picker: ^1.0.7
-  # 通知機能
-  flutter_local_notifications: ^17.2.1
-  # HTTP通信（Flaskサーバーとの連携用）
-  http: ^1.2.0
-  # カメラ・写真選択機能
+
   image_picker: ^1.0.7
   # 通知機能
   flutter_local_notifications: ^17.2.1
   # Google Maps（地図表示）
   google_maps_flutter: ^2.14.0
   # ローカル保存
-  # ローカル保存
   shared_preferences: ^2.2.2
-  # iOS風アイコン
   # iOS風アイコン
   cupertino_icons: ^1.0.8
 dev_dependencies:
