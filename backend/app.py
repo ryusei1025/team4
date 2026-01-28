@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
 from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 import os
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 from dotenv import load_dotenv 
 import json # AI診断の結果を処理するために必要
@@ -30,8 +30,23 @@ db.init_app(app)
 
 # Gemini API の設定
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+
+# =========================================================
+# ★追加コード: 起動時に「使えるモデル一覧」を表示する
+# =========================================================
+try:
+    if GEMINI_API_KEY:
+        print("\n======== 【デバッグ】利用可能なモデル一覧 ========")
+        debug_client = genai.Client(api_key=GEMINI_API_KEY)
+        for m in debug_client.models.list():
+            # "generateContent" (文章生成) に対応しているモデルだけ表示
+            if "generateContent" in (m.supported_actions or []):
+                # モデル名の "models/" を除いて表示
+                print(f"・ {m.name.replace('models/', '')}")
+        print("================================================\n")
+except Exception as e:
+    print(f"モデル一覧の取得に失敗しました: {e}")
+# =========================================================
 
 # ルートURL（/）にアクセスしたら、Flutterの画面を返す
 @app.route('/')
@@ -176,21 +191,59 @@ def get_bins():
     return jsonify(result)
 
 # =========================================================
-# 機能E: AIによる画像解析
+# 機能E: 画像診断（Gemini API）
 # =========================================================
-@app.route('/api/analyze_trash', methods=['POST'])
+# ★重要: URLをログに合わせて '/api/analyze_trash' にし、POSTを許可します
+@app.route('/api/analyze_trash', methods=['POST']) 
 def analyze_trash():
-    if not GEMINI_API_KEY: return jsonify({"error": "Gemini APIキー未設定"}), 500
-    if 'image' not in request.files: return jsonify({"error": "画像なし"}), 400
+    # 画像ファイルが送られてきているかチェック
+    if 'image' not in request.files:
+        return jsonify({"error": "画像なし"}), 400
+
     file = request.files['image']
+
     try:
+        # 画像を開く
         img = Image.open(file.stream)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = """ゴミ分別の専門家として解析しJSONで答えてください。{ "name": "名前", "type": "種別", "message": "アドバイス" }"""
-        response = model.generate_content([prompt, img])
+
+        # ---------------------------------------------------------
+        # 新しい google-genai ライブラリの書き方
+        # ---------------------------------------------------------
+        
+        # 1. クライアントを作成
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        # 2. プロンプトの準備
+        prompt = """
+        ゴミ分別の専門家として解析してください。
+        以下のJSONフォーマットのみで返答してください。余計な文章は不要です。
+        { 
+            "name": "ゴミの名前", 
+            "type": "ゴミの種別(燃やせるゴミ/燃やせないゴミ/資源ごみ/など)", 
+            "message": "分別のアドバイス" 
+        }
+        """
+
+        # 3. AIにリクエストを送る
+        response = client.models.generate_content(
+            model='gemini-flash-latest',
+            contents=[img, prompt]
+        )
+
+        if not response.text:
+            raise Exception("AIからの応答が空でした。")
+
         response_text = response.text.replace('```json', '').replace('```', '').strip()
-        return jsonify(json.loads(response_text))
+        result_json = json.loads(response_text)
+        
+        return jsonify(result_json)
+
     except Exception as e:
+        print(f"============== エラー発生 ==============")
+        print(e)
+        import traceback
+        traceback.print_exc()
+        print(f"========================================")
         return jsonify({"error": str(e)}), 500
 
 # =========================================================
