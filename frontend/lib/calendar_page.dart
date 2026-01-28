@@ -656,7 +656,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
         centerTitle: true, // タイトルを中央寄せ
 
         titleSpacing: 0,
-
+        backgroundColor: const Color.fromARGB(
+          255,
+          0,
+          221,
+          192,
+        ).withOpacity(0.8), // 少し透けさせて馴染ませる
         // 左側のハンバーガーメニューボタン
         leading: Builder(
           // Scaffold.of(context)を正しく動作させるためにBuilderで新しいcontextを作成
