@@ -560,11 +560,15 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
       // 次回予定テキスト作成
       String nextText = '';
+      
       if (nearestNotificationTime != null) {
+        // 1. 日付と時間の文字列作成
         final dateStr = "${nearestNotificationTime.month}/${nearestNotificationTime.day}";
         final timeStr = "${nearestNotificationTime.hour}:${nearestNotificationTime.minute.toString().padLeft(2, '0')}";
         
+        // 2. 「今日」「明日」の判定ロジック
         String dayLabel = dateStr;
+        final now = DateTime.now(); // ※nowが未定義の場合はここで取得、上位にあるなら不要
         final tomorrow = DateTime(now.year, now.month, now.day + 1);
         final today = DateTime(now.year, now.month, now.day);
         
@@ -576,11 +580,36 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           dayLabel = widget.lang == UiLang.ja ? "今日" : "Today";
         }
 
+        // 3. ★追加: ゴミの名前を英語に翻訳するマップ
+        final Map<String, String> trashNameEn = {
+          '燃やせるごみ': 'Burnable',
+          '燃やせないごみ': 'Non-burnable',
+          'びん・缶・ペットボトル': 'Bottles/Cans/PET',
+          '容器包装プラスチック': 'Plastic Packaging',
+          '雑がみ': 'Misc. Paper',
+          '枝・葉・草': 'Branches/Leaves',
+          // 必要に応じて他のゴミ種別もここに追加
+        };
+
+        // 4. ★追加: 言語設定に応じてゴミの名前を切り替え
+        // 日本語ならそのまま、英語ならマップから取得（なければ元のまま）
+        String displayTrashName = nearestTrashName;
+        if (widget.lang != UiLang.ja) {
+          // 部分一致や完全一致で翻訳を探す（データ構造に合わせて調整してください）
+          // 単純な文字列一致の場合:
+          displayTrashName = trashNameEn[nearestTrashName] ?? nearestTrashName;
+        }
+
+        // 5. テキストの組み立て
         nextText = widget.lang == UiLang.ja 
-            ? "次回: $nearestTrashName ($dayLabel $timeStr)"
-            : "Next: $nearestTrashName ($dayLabel $timeStr)";
+            ? "次回: $displayTrashName ($dayLabel $timeStr)"
+            : "Next: $displayTrashName ($dayLabel $timeStr)";
+            
       } else {
-        nextText = widget.lang == UiLang.ja ? "予定されている通知はありません" : "No upcoming notifications";
+        // 通知がない場合
+        nextText = widget.lang == UiLang.ja 
+            ? "予定されている通知はありません" 
+            : "No upcoming notifications";
       }
 
       // ★★★ 修正ポイント ★★★

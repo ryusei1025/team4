@@ -257,6 +257,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
     '手稲区': ['手稲区1', '手稲区2', '手稲区3'],
   };
 
+  // 区名の英語マッピング
+  final Map<String, String> _wardNamesEn = {
+    '中央区': 'Chuo',
+    '北区': 'Kita',
+    '東区': 'Higashi',
+    '白石区': 'Shiroishi',
+    '厚別区': 'Atsubetsu',
+    '豊平区': 'Toyohira',
+    '清田区': 'Kiyota',
+    '南区': 'Minami',
+    '西区': 'Nishi',
+    '手稲区': 'Teine',
+  };
+
   // 区のリスト（中央区, 豊平区...）を取得するゲッター
   List<String> get _wardList => _areaData.keys.toList();
 
@@ -269,12 +283,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
   UiLang _lang = UiLang.ja;
   bool _showGuide = false; // ガイド表示フラグ
 
-  // ==========================================
+// ==========================================
   // 5. データ：お知らせ・お問い合わせ・祝日設定
   // ==========================================
 
-  // 重要なお知らせ（共通）
-  late final List<String> _commonImportantNotice = <String>[
+  // --- 重要なお知らせデータ (日本語) ---
+  final List<String> _importantNoticeJa = [
     'ごみは収集日の朝8時30分までに出してください',
     '指定袋以外での排出は収集されません',
     '年末年始は収集日程が変更になります',
@@ -282,41 +296,43 @@ class _CalendarScreenState extends State<CalendarScreen> {
     '土日はごみ収集を行いません',
   ];
 
-  // 全10区に対応させました（内容は共通のものをセット）
-  late final Map<String, List<String>> _importantNoticeByArea = {
-    '中央区': _commonImportantNotice,
-    '北区': _commonImportantNotice,
-    '東区': _commonImportantNotice,
-    '白石区': _commonImportantNotice,
-    '厚別区': _commonImportantNotice,
-    '豊平区': _commonImportantNotice,
-    '清田区': _commonImportantNotice,
-    '南区': _commonImportantNotice,
-    '西区': _commonImportantNotice,
-    '手稲区': _commonImportantNotice,
-  };
+  // --- 重要なお知らせデータ (英語) ---
+  final List<String> _importantNoticeEn = [
+    'Please put out garbage by 8:30 AM on the collection day.',
+    'Garbage not in designated bags will not be collected.',
+    'Collection schedules change during the New Year holidays.',
+    'Collection may be canceled during severe weather (e.g., typhoons).',
+    'No garbage collection on Saturdays and Sundays.',
+  ];
 
-  // お問い合わせ情報（共通）
-  late final List<String> _commonInquiry = <String>[
+  // ★ UIで使用するゲッター（言語設定に応じて自動で切り替わります）
+  // 画面を描画する際、この _currentImportantNotices を呼び出してください
+  List<String> get _currentImportantNotices {
+    // 現在は全区共通の内容を返していますが、
+    // 将来的に区ごとに変えたい場合はここで if (_selectedWard == '...') 等で分岐可能です
+    return _lang == UiLang.ja ? _importantNoticeJa : _importantNoticeEn;
+  }
+
+  // --- お問い合わせ情報データ (日本語) ---
+  final List<String> _inquiryJa = [
     '札幌市コールセンター : [011-222-4894]',
     '受付時間 : [平日 8:00〜21:00]',
     '土日祝 : [9:00〜17:00]',
     '札幌市公式ウェブサイト : https://www.city.sapporo.jp/seiso/kaisyu/index.html',
   ];
 
-  // 全10区に対応させました
-  late final Map<String, List<String>> _inquiryByArea = {
-    '中央区': _commonInquiry,
-    '北区': _commonInquiry,
-    '東区': _commonInquiry,
-    '白石区': _commonInquiry,
-    '厚別区': _commonInquiry,
-    '豊平区': _commonInquiry,
-    '清田区': _commonInquiry,
-    '南区': _commonInquiry,
-    '西区': _commonInquiry,
-    '手稲区': _commonInquiry,
-  };
+  // --- お問い合わせ情報データ (英語) ---
+  final List<String> _inquiryEn = [
+    'Sapporo City Call Center : [011-222-4894]',
+    'Hours : [Weekdays 8:00 - 21:00]',
+    'Sat/Sun/Holidays : [9:00 - 17:00]',
+    'Official Website : https://www.city.sapporo.jp/seiso/kaisyu/index.html',
+  ];
+
+  // ★ UIで使用するゲッター
+  List<String> get _currentInquiries {
+    return _lang == UiLang.ja ? _inquiryJa : _inquiryEn;
+  }
 
   // ★【追加】読み込んだスケジュールデータ（日付 -> ゴミ種別リスト）
   Map<DateTime, List<GarbageType>> _scheduleCache = {};
@@ -642,87 +658,78 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  @override // buildメソッドをオーバーライドしてUIを描画
+@override
   Widget build(BuildContext context) {
-    // 画面UI構築（状態変化、setStateなどで再ビルドされる）
     return Scaffold(
-      // 画面の基本構造（土台）
-      backgroundColor: const Color(0xFFF6F7FB), // 背景色（薄いグレー）
-      // 左側のドロワーメニュー（外部ファイルで定義されたWidget）
+      backgroundColor: const Color(0xFFF6F7FB),
       drawer: LeftMenuDrawer(lang: _lang, selectedArea: _selectedArea),
 
-      // 上部のヘッダーバー（固定表示）
+      // --- AppBar ---
       appBar: AppBar(
-        centerTitle: true, // タイトルを中央寄せ
-
+        centerTitle: true,
         titleSpacing: 0,
-        backgroundColor: const Color.fromARGB(
-          255,
-          0,
-          221,
-          192,
-        ).withOpacity(0.8), // 少し透けさせて馴染ませる
-        // 左側のハンバーガーメニューボタン
+        backgroundColor: const Color.fromARGB(255, 0, 221, 192).withOpacity(0.8),
         leading: Builder(
-          // Scaffold.of(context)を正しく動作させるためにBuilderで新しいcontextを作成
           builder: (ctx) => IconButton(
             icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(ctx).openDrawer(), // ドロワーを開く
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
-
         title: Container(
-          padding: EdgeInsets.zero, // 余計な余白を消して広く使う
+          padding: EdgeInsets.zero,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
+            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ① 区を選ぶドロップダウン（例：中央区）
+              // ① 区を選ぶドロップダウン
               Flexible(
-                flex: 5, // 幅の比率（少し広め）
+                flex: 5,
                 child: _HeaderDropdown<String>(
+                  // ラベル: 日本語なら「区」、英語なら「Ward」
                   label: _lang == UiLang.ja ? '区' : 'Ward',
                   value: _selectedWard,
-                  items: _wardList, // 区のリスト
-                  itemLabel: (v) => v,
-                  width: null, // ★重要：nullにしてFlexibleに幅調整を任せる
+                  items: _wardList,
+                  // ★修正: リストの中身の表示名を言語で切り替え
+                  // 日本語ならそのまま(v)、英語ならマップから変換(_wardNamesEn[v])
+                  itemLabel: (v) => _lang == UiLang.ja
+                      ? v
+                      : (_wardNamesEn[v] ?? v),
+                  width: null,
                   onChanged: (newWard) {
                     setState(() {
                       _selectedWard = newWard;
-                      // 区が変わったら、その区の「1番目」を自動選択する
                       _selectedArea = _areaData[newWard]!.first;
                     });
                   },
                 ),
               ),
 
-              const SizedBox(width: 8), // 間隔
-              // ---------------------------------------------
-              // ② 番号を選ぶドロップダウン（幅の比率 4）
-              // ---------------------------------------------
+              const SizedBox(width: 8),
+
+              // ② 番号を選ぶドロップダウン
               Expanded(
-                flex: 4, // 4割の幅を使う
+                flex: 4,
                 child: _HeaderDropdown<String>(
-                  label: 'No.',
+                  label: 'No.', // "No."は英語・日本語共通でOK
                   value: _selectedArea,
                   items: _areaData[_selectedWard]!,
-                  // 「中央区1」→「1」と表示
+                  // 「中央区1」から「中央区」を消して「1」だけ表示（数字なので翻訳不要）
                   itemLabel: (v) => v.replaceFirst(_selectedWard, ''),
-                  width: null, // 自動幅
+                  width: null,
                   onChanged: (newArea) {
                     setState(() {
                       _selectedArea = newArea;
                     });
-                    // 番号が変わったら再読み込み
                     _loadScheduleData();
                   },
                 ),
               ),
 
-              const SizedBox(width: 8), // 間隔
-              // ③ マップ確認ボタン（サイズ固定だがFlexible内にあるので安全）
+              const SizedBox(width: 8),
+
+              // ③ マップ確認ボタン
               Container(
-                width: 36, // 少し小さく
+                width: 36,
                 height: 36,
                 decoration: BoxDecoration(
                   color: const Color(0xFFE7EBF3),
@@ -731,11 +738,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    Icons.map_outlined,
-                    size: 20,
-                    color: Colors.blueGrey,
-                  ),
+                  icon: const Icon(Icons.map_outlined, size: 20, color: Colors.blueGrey),
+                  // ツールチップの翻訳
                   tooltip: _lang == UiLang.ja ? '地図を確認' : 'Check Map',
                   onPressed: _showAreaMapDialog,
                 ),
@@ -743,40 +747,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ],
           ),
         ),
-
-        // 右側の言語切り替えボタン
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: LanguageSelector(
               currentLang: _lang,
-              onChanged: (v) => setState(() => _lang = v), // 言語変更時に全体を再描画
+              onChanged: (v) => setState(() => _lang = v),
             ),
           ),
         ],
       ),
 
-      // メインコンテンツ部分（スクロール可能）
+      // --- Body ---
       body: Scrollbar(
-        // スクロールバーを表示（PC/Webでの操作性向上）
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16), // 画面端からの余白
+          padding: const EdgeInsets.all(16),
           child: Center(
-            // 大画面でもコンテンツが広がりすぎないように中央寄せ
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520), // 最大幅を520pxに制限
+              constraints: const BoxConstraints(maxWidth: 520),
               child: Column(
-                // 要素を縦方向に並べる
                 children: [
-                  // 1. カレンダーカード（年月選択 + カレンダー本体）
+                  // 1. カレンダーカード
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: const Color(0xFFE1E5EE),
-                      ), // 薄い枠線
+                      border: Border.all(color: const Color(0xFFE1E5EE)),
                     ),
                     child: Column(
                       children: [
@@ -786,41 +783,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             // 年の操作
                             Row(
                               children: [
-                                // 「前の年」ボタン
                                 IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_back_ios,
-                                    size: 16,
-                                  ),
-                                  // ★修正: _visibleYear を使用して判定
+                                  icon: const Icon(Icons.arrow_back_ios, size: 16),
                                   onPressed: _visibleYear > baseYear
-                                      ? () => _jumpToMonth(
-                                          _visibleYear - 1,
-                                          _visibleMonth,
-                                        )
+                                      ? () => _jumpToMonth(_visibleYear - 1, _visibleMonth)
                                       : null,
                                 ),
-                                // 「年」のテキスト表示
+                                // ★修正: 「年」の表示切り替え
                                 Text(
-                                  // ★修正: ここで _visibleYear を表示に使用
-                                  ' $_visibleYear年 ',
+                                  _lang == UiLang.ja
+                                      ? ' $_visibleYear年 ' // 日本語: 2026年
+                                      : ' $_visibleYear ', // 英語: 2026
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                // 「次の年」ボタン
                                 IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                  ),
-                                  // ★修正: _visibleYear を使用して判定
+                                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
                                   onPressed: _visibleYear < maxYear
-                                      ? () => _jumpToMonth(
-                                          _visibleYear + 1,
-                                          _visibleMonth,
-                                        )
+                                      ? () => _jumpToMonth(_visibleYear + 1, _visibleMonth)
                                       : null,
                                 ),
                               ],
@@ -831,10 +813,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             // 月の選択ドロップダウン
                             Expanded(
                               child: _LabeledDropdown<int>(
-                                label: '月',
+                                // ★修正: ラベルを「月」か「Month」に切り替え
+                                label: _lang == UiLang.ja ? '月' : 'Month',
                                 value: _visibleMonth,
                                 items: List.generate(12, (i) => i + 1),
-                                itemLabel: (v) => '$v',
+                                itemLabel: (v) => '$v', // 数字はそのまま
                                 onChanged: (v) {
                                   _jumpToMonth(_visibleYear, v);
                                 },
@@ -847,31 +830,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                         // カレンダーグリッド本体
                         AspectRatio(
-                          aspectRatio: 7 / 7, // 正方形に近い比率で固定
+                          aspectRatio: 7 / 7,
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFFCED6E6),
-                              ),
+                              border: Border.all(color: const Color(0xFFCED6E6)),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: Column(
                               children: [
-                                // 曜日ヘッダー（日〜土）
+                                // 曜日ヘッダー
                                 _WeekdayRow(lang: _lang),
 
-                                // 日付部分（スワイプ/スクロール可能なPageView）
+                                // 日付部分 PageView
                                 Expanded(
                                   child: Listener(
-                                    // マウスホイールでの操作を検知
                                     onPointerSignal: _handlePointerSignal,
                                     child: PageView.builder(
                                       controller: _pageController,
-                                      scrollDirection: Axis.vertical, // 縦スクロール
+                                      scrollDirection: Axis.vertical,
                                       itemCount: totalMonths,
                                       onPageChanged: (index) {
-                                        // ページ切り替え時に年月表示を同期
                                         final m = _monthFromIndex(index);
                                         setState(() {
                                           _visibleYear = m.year;
@@ -885,12 +864,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                         return _MonthGrid(
                                           month: month,
                                           selectedDate: _selectedDate,
-                                          garbageTypesOf:
-                                              _garbageTypesFor, // 日付ごとのゴミ種別判定
-                                          onDateTap: (d) => _onDateTap(
-                                            d,
-                                            currentMonth: month,
-                                          ), // タップ処理
+                                          garbageTypesOf: _garbageTypesFor,
+                                          onDateTap: (d) => _onDateTap(d, currentMonth: month),
                                           lang: _lang,
                                         );
                                       },
@@ -916,7 +891,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                   const SizedBox(height: 10),
 
-                  // 3. 詳細ガイドの表示/非表示ボタン
+                  // 3. 詳細ガイドボタン
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -939,7 +914,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),
                   ),
 
-                  // 4. ガイドパネル（アニメーション付き開閉）
+                  // 4. ガイドパネル
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
                     switchInCurve: Curves.easeOut,
@@ -959,9 +934,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   _ImportantNoticeCard(
                     lang: _lang,
                     selectedArea: _selectedArea,
-                    items:
-                        _importantNoticeByArea[_selectedArea] ??
-                        _commonImportantNotice,
+                    items: _currentImportantNotices,
                   ),
 
                   const SizedBox(height: 10),
@@ -970,15 +943,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   _InquiryCard(
                     lang: _lang,
                     selectedArea: _selectedArea,
-                    lines: _inquiryByArea[_selectedArea] ?? _commonInquiry,
+                    lines: _currentInquiries,
                   ),
 
                   const SizedBox(height: 10),
 
-                  // 7. 週間スケジュールカード（選択中の日付の週を表示）
+                  // 7. 週間スケジュールカード
                   _WeeklyScheduleCard(
                     lang: _lang,
-                    // selectedDateがnullの場合は現在日時を渡す安全策
                     selectedDate: _selectedDate ?? DateTime.now(),
                     garbageTypesOf: _garbageTypesFor,
                   ),
@@ -1627,8 +1599,8 @@ class _ImportantNoticeCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   lang == UiLang.ja
-                      ? '重要なお知らせ（$selectedArea）'
-                      : 'Important notice ($selectedArea)', // 見出し
+                      ? '重要なお知らせ'
+                      : 'Important notice', // 見出し
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1715,8 +1687,8 @@ class _InquiryCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   lang == UiLang.ja
-                      ? 'お問い合わせ（$selectedArea）'
-                      : 'Contact ($selectedArea)', // 見出し
+                      ? 'お問い合わせ'
+                      : 'Contact', // 見出し
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
