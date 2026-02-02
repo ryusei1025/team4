@@ -15,7 +15,6 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   // WebではFile型が使えないため、データ(Uint8List)とXFileで管理します
-  XFile? _pickedFile; 
   Uint8List? _webImageBytes; // 画面表示用の画像データ
 
   final ImagePicker _picker = ImagePicker();
@@ -48,7 +47,6 @@ class _CameraScreenState extends State<CameraScreen> {
         final bytes = await image.readAsBytes();
         
         setState(() {
-          _pickedFile = image;
           _webImageBytes = bytes;
           _trashName = null;
           _trashType = null;
