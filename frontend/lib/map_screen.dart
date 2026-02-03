@@ -1,5 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'trash_bin_api.dart';
 import 'drawer_menu.dart';
 
@@ -12,11 +16,24 @@ class TrashBinMapScreen extends StatefulWidget {
 
 class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   GoogleMapController? _mapController;
+
   List<TrashBin> _allBins = [];
+  List<TrashBin> _searchedBins = [];
   List<TrashBin> _filteredBins = [];
-  Set<Marker> _markers = {}; // マーカーをセットとして保持
+  Set<Marker> _markers = {};
+
   final TextEditingController _searchController = TextEditingController();
-  static const LatLng _initialPosition = LatLng(43.062, 141.354);
+
+  static const LatLng _initialPosition = LatLng(43.062, 141.354); // 札幌中心
+
+  /// ===== 絞り込み状態 =====
+  final Map<String, bool> _filters = {
+    '古紙・リターナブルびん': false,
+    '小型家電': false,
+    '蛍光管': false,
+    '古着': false,
+    '使用済み食用油': false,
+  };
 
   @override
   void initState() {
@@ -24,133 +41,312 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     _loadBins();
   }
 
-  /// Flask API からゴミ箱一覧取得
   Future<void> _loadBins() async {
-    try {
-      final bins = await TrashBinApi.fetchBins();
-      setState(() {
-        _allBins = bins;
-        _filteredBins = bins;
-        _updateMarkers(); // 取得後にマーカーを生成
-      });
-    } catch (e) {
-      debugPrint("API Error: $e");
-    }
+    final bins = await TrashBinApi.fetchBins();
+    setState(() {
+      _allBins = bins;
+      _searchedBins = [];
+      _filteredBins = [];
+      _markers = {};
+    });
   }
 
-  /// マーカーセットを更新する
+  /// ======================
+  /// 地域検索
+  /// ======================
+  void _search(String keyword) {
+    final normalized = keyword.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+
+    setState(() {
+      if (normalized.isEmpty) {
+        _searchedBins = [];
+      } else {
+        _searchedBins = _allBins.where((bin) {
+          final name =
+              bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+          final address =
+              bin.address.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+          return name.contains(normalized) ||
+              address.contains(normalized);
+        }).toList();
+      }
+    });
+
+    _applyFilters();
+  }
+
+  /// ======================
+  /// 全件表示
+  /// ======================
+  void _showAllBins() {
+    setState(() {
+      _searchController.clear();
+      _searchedBins = List.from(_allBins);
+    });
+    _applyFilters();
+  }
+
+  /// ======================
+  /// 絞り込み適用
+  /// ======================
+  void _applyFilters() {
+    final active =
+        _filters.entries.where((e) => e.value).map((e) => e.key).toList();
+
+    setState(() {
+      if (active.isEmpty) {
+        _filteredBins = List.from(_searchedBins);
+      } else {
+        _filteredBins = _searchedBins.where((bin) {
+          return active.any((f) => bin.type.contains(f));
+        }).toList();
+      }
+    });
+
+    _updateMarkers();
+    _moveCameraToBounds();
+  }
+
+  /// ======================
+  /// マーカー生成
+  /// ======================
   void _updateMarkers() {
-    final newMarkers = _filteredBins.map((bin) {
+    _markers = _filteredBins.map((bin) {
       return Marker(
         markerId: MarkerId(bin.id.toString()),
         position: LatLng(bin.lat, bin.lon),
-        infoWindow: InfoWindow(title: bin.name, snippet: bin.address),
-        onTap: () {
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(bin.lat, bin.lon), 17),
-          );
-        },
+        infoWindow: InfoWindow(
+          title: bin.name,
+          snippet: '${bin.address}\n種類: ${bin.type}',
+        ),
+        onTap: () => _showBinSheet(bin),
       );
     }).toSet();
 
-    setState(() {
-      _markers = newMarkers;
-    });
+    setState(() {});
   }
 
-  /// あいまい検索
-  void _search(String keyword) {
-    final normalizedKeyword = keyword.toLowerCase().replaceAll(
-      RegExp(r'\s+'),
-      '',
-    );
-    setState(() {
-      if (normalizedKeyword.isEmpty) {
-        _filteredBins = _allBins;
-      } else {
-        _filteredBins = _allBins.where((bin) {
-          final name = bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-          final address = bin.address.toLowerCase().replaceAll(
-            RegExp(r'\s+'),
-            '',
-          );
-          return name.contains(normalizedKeyword) ||
-              address.contains(normalizedKeyword);
-        }).toList();
-      }
-      _updateMarkers(); // 検索後にマーカーを再生成
-    });
+  void _moveCameraToBounds() {
+    if (_filteredBins.isEmpty || _mapController == null) return;
 
-    if (_filteredBins.isNotEmpty && _mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(_filteredBins[0].lat, _filteredBins[0].lon),
-          15,
-        ),
-      );
+    double minLat = _filteredBins.first.lat;
+    double maxLat = _filteredBins.first.lat;
+    double minLon = _filteredBins.first.lon;
+    double maxLon = _filteredBins.first.lon;
+
+    for (final b in _filteredBins) {
+      minLat = min(minLat, b.lat);
+      maxLat = max(maxLat, b.lat);
+      minLon = min(minLon, b.lon);
+      maxLon = max(maxLon, b.lon);
     }
+
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLon),
+          northeast: LatLng(maxLat, maxLon),
+        ),
+        80,
+      ),
+    );
   }
 
+  /// ======================
+  /// 詳細 BottomSheet
+  /// ======================
+  void _showBinSheet(TrashBin bin) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              bin.name,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(bin.address),
+            Text('種類: ${bin.type}'),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.map),
+              label: const Text('Googleマップで開く'),
+              onPressed: () async {
+                final query = Uri.encodeComponent(
+                  '${bin.name} ${bin.address}',
+                );
+
+                final uri = Uri.parse(
+                  'https://www.google.com/maps/search/?api=1&query=$query',
+                );
+
+                if (await canLaunchUrl(uri)) {
+                  launchUrl(uri,
+                      mode: LaunchMode.externalApplication);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ======================
+  /// 絞り込み BottomSheet（適用ボタンあり）
+  /// ======================
+  void _openFilterSheet() {
+    final tempFilters = Map<String, bool>.from(_filters);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '絞り込み',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+
+                  ...tempFilters.keys.map((key) {
+                    return CheckboxListTile(
+                      title: Text(key),
+                      value: tempFilters[key],
+                      onChanged: (v) {
+                        setModalState(() {
+                          tempFilters[key] = v!;
+                        });
+                      },
+                    );
+                  }),
+
+                  const SizedBox(height: 8),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          setModalState(() {
+                            tempFilters.updateAll((k, v) => false);
+                          });
+                        },
+                        child: const Text('リセット'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _filters
+                              ..clear()
+                              ..addAll(tempFilters);
+                          });
+                          _applyFilters();
+                          Navigator.pop(context);
+                        },
+                        child: const Text('適用'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// ======================
+  /// UI
+  /// ======================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // メニュー（drawer_menu.dart）を呼び出し
-      drawer: const LeftMenuDrawer(lang: UiLang.ja, selectedArea: '札幌市'),
+      // ★ 追加：メニューバー復活
       appBar: AppBar(
-        title: const Text(
-          'ゴミ箱マップ',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        elevation: 0,
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
-          ),
-        ),
+
+      drawer: const LeftMenuDrawer(
+        lang: UiLang.ja,
+        selectedArea: '札幌市',
+      ),
+
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+
+      body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: '住所・ゴミ箱名で検索',
-                  prefixIcon: const Icon(Icons.search, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.85),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide.none,
+              padding: const EdgeInsets.all(12),
+              child: Material(
+                elevation: 2,
+                borderRadius: BorderRadius.circular(30),
+                child: TextField(
+                  controller: _searchController,
+                  onSubmitted: _search,
+                  decoration: const InputDecoration(
+                    hintText: '地域を検索',
+                    prefixIcon: Icon(Icons.search),
+                    border: InputBorder.none,
+                    contentPadding:
+                        EdgeInsets.symmetric(vertical: 14),
                   ),
                 ),
-                textInputAction: TextInputAction.search,
-                onSubmitted: _search,
               ),
             ),
+
             Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(30),
+              child: GoogleMap(
+                initialCameraPosition: const CameraPosition(
+                  target: _initialPosition,
+                  zoom: 14,
                 ),
-                child: GoogleMap(
-                  initialCameraPosition: const CameraPosition(
-                    target: _initialPosition,
-                    zoom: 14,
-                  ),
-                  markers: _markers, // 保持しているマーカーセットを表示
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                ),
+                markers: _markers,
+                onMapCreated: (c) => _mapController = c,
+                myLocationEnabled: true,
+                myLocationButtonEnabled: true,
               ),
             ),
           ],
         ),
+      ),
+
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'all',
+            icon: const Icon(Icons.list),
+            label: const Text('全件'),
+            onPressed: _showAllBins,
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'filter',
+            onPressed: _openFilterSheet,
+            child: const Icon(Icons.tune),
+          ),
+        ],
       ),
     );
   }
