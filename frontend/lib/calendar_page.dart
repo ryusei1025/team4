@@ -1,10 +1,9 @@
-// import 'dart:convert'; // 将来JSON読み込みが必要になったら復活させる
-
 import 'package:flutter/gestures.dart'; // マウスホイール操作用
 import 'package:flutter/material.dart'; // UI部品用
 import 'drawer_menu.dart'; // ドロワーメニューや言語設定
 import 'package:csv/csv.dart'; // CSV解析用
 import 'package:flutter/services.dart' show rootBundle; // アセット読み込み用
+import 'dart:convert'; // JSONデコード用
 
 // ==========================================
 // 1. 共通定義：ゴミ種別・基本設定
@@ -100,49 +99,26 @@ Color garbageBgColor(GarbageType type) {
 }
 
 /// ゴミ種別ごとの「表示名」（多言語対応）
-String garbageLabel(GarbageType type, UiLang lang) {
-  if (lang == UiLang.ja) {
-    switch (type) {
-      case GarbageType.burnable:
-        return '燃やせるごみ（有料）';
-      case GarbageType.spray:
-        return 'スプレー缶類（別袋無料）';
-      case GarbageType.nonBurnable:
-        return '燃やせないごみ（有料）';
-      case GarbageType.lighter:
-        return '加熱式たばこ・ライター・筒型乾電池（別袋無料）';
-      case GarbageType.recyclable:
-        return 'びん・缶・ペットボトル（無料）';
-      case GarbageType.battery:
-        return '乾電池（無料）';
-      case GarbageType.plastic:
-        return '容器包装プラスチック（無料）';
-      case GarbageType.paper:
-        return '雑がみ（無料）';
-      case GarbageType.green:
-        return '枝・葉・草（無料）';
-    }
-  } else {
-    switch (type) {
-      case GarbageType.burnable:
-        return 'Burnable (Paid)';
-      case GarbageType.spray:
-        return 'Spray cans (Free)';
-      case GarbageType.nonBurnable:
-        return 'Non-burnable (Paid)';
-      case GarbageType.lighter:
-        return 'Lighters/Batteries (Free)';
-      case GarbageType.recyclable:
-        return 'Bottles/Cans/PET (Free)';
-      case GarbageType.battery:
-        return 'Batteries (Free)';
-      case GarbageType.plastic:
-        return 'Plastic containers (Free)';
-      case GarbageType.paper:
-        return 'Mixed Paper (Free)';
-      case GarbageType.green:
-        return 'Leaves/Grass (Free)';
-    }
+String garbageLabel(GarbageType type, Map<String, dynamic> trans) {
+  switch (type) {
+    case GarbageType.burnable:
+      return trans['trash_burnable'] ?? '燃やせるごみ（有料）';
+    case GarbageType.spray:
+      return trans['trash_spray'] ?? 'スプレー缶類（別袋無料）';
+    case GarbageType.nonBurnable:
+      return trans['trash_non_burnable'] ?? '燃やせないごみ（有料）';
+    case GarbageType.lighter:
+      return trans['trash_lighter'] ?? '加熱式たばこ・ライター・筒型乾電池（別袋無料）';
+    case GarbageType.recyclable:
+      return trans['trash_recyclable'] ?? 'びん・缶・ペットボトル（無料）';
+    case GarbageType.battery:
+      return trans['trash_battery'] ?? '乾電池（無料）';
+    case GarbageType.plastic:
+      return trans['trash_plastic'] ?? '容器包装プラスチック（無料）';
+    case GarbageType.paper:
+      return trans['trash_paper'] ?? '雑がみ（無料）';
+    case GarbageType.green:
+      return trans['trash_green'] ?? '枝・葉・草（無料）';
   }
 }
 
@@ -231,6 +207,10 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+
+  // 翻訳データを保持するマップ
+  Map<String, dynamic> _trans = {};
+
   // 動的に設定するための変数定義
   late int baseYear; // 開始年（今年）
   late int maxYear; // 終了年（3年後など）
@@ -283,56 +263,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
   UiLang _lang = UiLang.ja;
   bool _showGuide = false; // ガイド表示フラグ
 
-// ==========================================
-  // 5. データ：お知らせ・お問い合わせ・祝日設定
-  // ==========================================
+  // ★追加: 言語ファイルを読み込むメソッド
+  Future<void> _loadTranslations(UiLang lang) async {
+    // 言語コードの決定 (ja, en, zh, ko...)
+    String langCode = lang.name; // enumの名前をそのまま使う場合 (ja, en)
+    // ※中国語などが enum にない場合は別途マッピングが必要です
+    // 例: if (lang == UiLang.zh) langCode = 'zh';
 
-  // --- 重要なお知らせデータ (日本語) ---
-  final List<String> _importantNoticeJa = [
-    'ごみは収集日の朝8時30分までに出してください',
-    '指定袋以外での排出は収集されません',
-    '年末年始は収集日程が変更になります',
-    '台風等の悪天候時は収集を中止する場合があります',
-    '土日はごみ収集を行いません',
-  ];
-
-  // --- 重要なお知らせデータ (英語) ---
-  final List<String> _importantNoticeEn = [
-    'Please put out garbage by 8:30 AM on the collection day.',
-    'Garbage not in designated bags will not be collected.',
-    'Collection schedules change during the New Year holidays.',
-    'Collection may be canceled during severe weather (e.g., typhoons).',
-    'No garbage collection on Saturdays and Sundays.',
-  ];
-
-  // ★ UIで使用するゲッター（言語設定に応じて自動で切り替わります）
-  // 画面を描画する際、この _currentImportantNotices を呼び出してください
-  List<String> get _currentImportantNotices {
-    // 現在は全区共通の内容を返していますが、
-    // 将来的に区ごとに変えたい場合はここで if (_selectedWard == '...') 等で分岐可能です
-    return _lang == UiLang.ja ? _importantNoticeJa : _importantNoticeEn;
+    try {
+      // JSONファイルを読み込む
+      String jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      Map<String, dynamic> jsonMap = json.decode(jsonString);
+      
+      setState(() {
+        _trans = jsonMap;
+        _lang = lang; // 言語状態も更新
+      });
+    } catch (e) {
+      debugPrint('Translation load error: $e');
+      // エラー時は日本語をデフォルトにするなどの処理
+    }
   }
 
-  // --- お問い合わせ情報データ (日本語) ---
-  final List<String> _inquiryJa = [
-    '札幌市コールセンター : [011-222-4894]',
-    '受付時間 : [平日 8:00〜21:00]',
-    '土日祝 : [9:00〜17:00]',
-    '札幌市公式ウェブサイト : https://www.city.sapporo.jp/seiso/kaisyu/index.html',
-  ];
-
-  // --- お問い合わせ情報データ (英語) ---
-  final List<String> _inquiryEn = [
-    'Sapporo City Call Center : [011-222-4894]',
-    'Hours : [Weekdays 8:00 - 21:00]',
-    'Sat/Sun/Holidays : [9:00 - 17:00]',
-    'Official Website : https://www.city.sapporo.jp/seiso/kaisyu/index.html',
-  ];
-
-  // ★ UIで使用するゲッター
-  List<String> get _currentInquiries {
-    return _lang == UiLang.ja ? _inquiryJa : _inquiryEn;
-  }
 
   // ★【追加】読み込んだスケジュールデータ（日付 -> ゴミ種別リスト）
   Map<DateTime, List<GarbageType>> _scheduleCache = {};
@@ -371,6 +323,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     // CSVデータを読み込む
     _loadScheduleData();
+
+    _loadTranslations(_lang);
   }
 
   // ★【追加】CSVデータを読み込んで解析するメソッド
@@ -553,13 +507,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     // 2. 収集なしの場合
     if (types.isEmpty) {
-      return _lang == UiLang.ja ? '収集なし' : 'No collection';
+      return _trans['no_collection'] ?? 
+            (_lang == UiLang.ja ? '収集なし' : 'No collection');
     }
 
     // 3. ゴミ種別を文字に変換して連結（例：「燃やせるごみ・プラスチック」）
     // garbageLabelメソッドは元のコードにあるはずなので、そのまま使います
     final gText = types
-        .map((t) => garbageLabel(t, _lang))
+        .map((t) => garbageLabel(t, _trans))
         .join(_lang == UiLang.ja ? '・' : ' / ');
 
     // 4. シンプルにゴミの内容だけを返す
@@ -686,7 +641,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 flex: 5,
                 child: _HeaderDropdown<String>(
                   // ラベル: 日本語なら「区」、英語なら「Ward」
-                  label: _lang == UiLang.ja ? '区' : 'Ward',
+                  label: _trans['ward'] ?? '区',
                   value: _selectedWard,
                   items: _wardList,
                   // ★修正: リストの中身の表示名を言語で切り替え
@@ -752,7 +707,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             padding: const EdgeInsets.only(right: 12),
             child: LanguageSelector(
               currentLang: _lang,
-              onChanged: (v) => setState(() => _lang = v),
+              onChanged: (v) {
+                _loadTranslations(v); 
+              },
             ),
           ),
         ],
@@ -814,7 +771,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             Expanded(
                               child: _LabeledDropdown<int>(
                                 // ★修正: ラベルを「月」か「Month」に切り替え
-                                label: _lang == UiLang.ja ? '月' : 'Month',
+                                label: _trans['month'] ?? '月',
                                 value: _visibleMonth,
                                 items: List.generate(12, (i) => i + 1),
                                 itemLabel: (v) => '$v', // 数字はそのまま
@@ -840,7 +797,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             child: Column(
                               children: [
                                 // 曜日ヘッダー
-                                _WeekdayRow(lang: _lang),
+                                _WeekdayRow(trans: _trans),
 
                                 // 日付部分 PageView
                                 Expanded(
@@ -896,19 +853,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () => setState(() => _showGuide = !_showGuide),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.all(12),
-                        minimumSize: const Size.fromHeight(48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+                      // ... (スタイル)
                       child: Text(
                         _showGuide
-                            ? (_lang == UiLang.ja ? '詳細情報を非表示' : 'Hide guide')
-                            : (_lang == UiLang.ja ? '詳細情報を表示' : 'Show guide'),
+                            ? (_trans['hide_guide'] ?? '詳細情報を非表示') // ★JSON使用
+                            : (_trans['show_guide'] ?? '詳細情報を表示'), // ★JSON使用
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -917,13 +866,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   // 4. ガイドパネル
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeOut,
                     child: _showGuide
                         ? Padding(
                             key: const ValueKey('guide'),
                             padding: const EdgeInsets.only(top: 10),
-                            child: _GarbageGuidePanel(lang: _lang),
+                            // ★修正: transを渡す
+                            child: _GarbageGuidePanel(trans: _trans),
                           )
                         : const SizedBox.shrink(key: ValueKey('empty')),
                   ),
@@ -932,25 +880,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                   // 5. 重要なお知らせカード
                   _ImportantNoticeCard(
-                    lang: _lang,
+                    trans: _trans, // ★追加: タイトル用
                     selectedArea: _selectedArea,
-                    items: _currentImportantNotices,
+                    // ★JSONからリストを取得
+                    items: List<String>.from(_trans['important_notices'] ?? []),
                   ),
 
                   const SizedBox(height: 10),
 
                   // 6. お問い合わせカード
                   _InquiryCard(
-                    lang: _lang,
+                    trans: _trans, // ★追加: タイトル用
                     selectedArea: _selectedArea,
-                    lines: _currentInquiries,
+                    // ★JSONからリストを取得
+                    lines: List<String>.from(_trans['contact_info'] ?? []),
                   ),
 
                   const SizedBox(height: 10),
 
                   // 7. 週間スケジュールカード
                   _WeeklyScheduleCard(
-                    lang: _lang,
+                    trans: _trans,
                     selectedDate: _selectedDate ?? DateTime.now(),
                     garbageTypesOf: _garbageTypesFor,
                   ),
@@ -1091,17 +1041,21 @@ class _LabeledDropdown<T> extends StatelessWidget {
 // =========================== // セクション区切り
 
 class _WeekdayRow extends StatelessWidget {
-  // 曜日ラベルを表示する行
-  final UiLang lang; // 言語設定（日/英切り替え用）
-
-  const _WeekdayRow({required this.lang});
+  final Map<String, dynamic> trans;
+  const _WeekdayRow({required this.trans});
 
   @override
   Widget build(BuildContext context) {
-    // 言語に応じた曜日ラベルリスト
-    final labels = (lang == UiLang.ja)
-        ? const ['日', '月', '火', '水', '木', '金', '土']
-        : const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // JSONから曜日リストを作成
+    final days = [
+      trans['sun'] ?? '日',
+      trans['mon'] ?? '月',
+      trans['tue'] ?? '火',
+      trans['wed'] ?? '水',
+      trans['thu'] ?? '木',
+      trans['fri'] ?? '金',
+      trans['sat'] ?? '土',
+    ];
 
     return Container(
       height: 40, // 行の高さ固定
@@ -1117,7 +1071,7 @@ class _WeekdayRow extends StatelessWidget {
           (i) => Expanded(
             child: Center(
               child: Text(
-                labels[i], // 曜日文字
+                days[i], // 曜日文字
                 style: TextStyle(
                   fontSize: 12, // フォントサイズ
                   fontWeight: FontWeight.bold, // 太字
@@ -1360,15 +1314,14 @@ class _SelectedInfoCard extends StatelessWidget {
 } // _SelectedInfoCard終わり
 
 // ===========================
-// ★詳細情報パネル：ゴミ出しの注意点ガイド（CSV解析とは無関係に固定情報を表示）
+// ★詳細情報パネル：ゴミ出しの注意点ガイド（JSONデータ対応版）
 // ===========================
-
 class _GarbageGuidePanel extends StatelessWidget {
-  final UiLang lang;
+  // ★変更: UiLangではなく翻訳データを受け取る
+  final Map<String, dynamic> trans;
 
   const _GarbageGuidePanel({
-    required this.lang,
-    // selectedArea や rules は不要になったので削除
+    required this.trans, // ★変更
   });
 
   Widget _typeCard({
@@ -1376,6 +1329,7 @@ class _GarbageGuidePanel extends StatelessWidget {
     required String title,
     required String note,
   }) {
+    // (このメソッドの中身はデザインなので変更なし)
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -1387,7 +1341,6 @@ class _GarbageGuidePanel extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 左側：アイコンと色
           Column(
             children: [
               Icon(garbageIcon(type), color: garbageIconColor(type), size: 28),
@@ -1403,25 +1356,18 @@ class _GarbageGuidePanel extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 12),
-          // 右側：タイトルと説明
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   note,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF424242),
-                  ),
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF424242)),
                 ),
               ],
             ),
@@ -1433,80 +1379,17 @@ class _GarbageGuidePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 表示するガイドデータの定義
-    // ★修正：新しいGarbageTypeに合わせて8種類すべてを定義
+    // 表示する項目の定義（種類とJSONキーのマッピング）
     final items = [
-      (
-        type: GarbageType.burnable,
-        titleJa: '燃やせるごみ',
-        titleEn: 'Burnable',
-        noteJa: '・生ごみは水をよく切る\n・食用油は紙や布に染み込ませる\n・汚れた紙やおむつもこちら\n・指定袋を使用',
-        noteEn:
-            'Drain food waste. Soak up oil. Dirty paper/diapers are also burnable. Use designated bags.',
-      ),
-      (
-        type: GarbageType.spray, // ★追加
-        titleJa: 'スプレー缶類',
-        titleEn: 'Spray Cans',
-        noteJa: '・穴を開けずに中身を使い切る\n・透明・半透明の袋に入れる\n・「燃やせるごみ」の日に別袋にして出す',
-        noteEn:
-            'Use up completely. Do NOT puncture. Put in a separate transparent bag on Burnable days.',
-      ),
-      (
-        type: GarbageType.nonBurnable,
-        titleJa: '燃やせないごみ',
-        titleEn: 'Non-burnable',
-        noteJa: '・ガラス、陶磁器、小型家電など\n・刃物は紙に包んで「キケン」と書く\n・指定袋を使用',
-        noteEn:
-            'Glass, ceramics, small appliances. Wrap blades and label "Danger". Use designated bags.',
-      ),
-      (
-        type: GarbageType.lighter, // ★追加
-        titleJa: 'ライター・加熱式たばこ',
-        titleEn: 'Lighters / Heated Tobacco',
-        noteJa: '・中身を使い切る\n・水に浸してから透明・半透明の袋に入れる\n・「燃やせないごみ」の日に別袋にして出す',
-        noteEn:
-            'Use up completely. Soak in water. Put in a separate transparent bag on Non-burnable days.',
-      ),
-      (
-        type: GarbageType.recyclable,
-        titleJa: 'びん・缶・ペットボトル',
-        titleEn: 'Bottles / Cans / PET',
-        noteJa: '・中をすすぐ\n・ペットボトルのキャップとラベルは外して「プラ」へ\n・透明・半透明の袋に入れる',
-        noteEn:
-            'Rinse inside. Remove caps/labels from PET bottles (put in Plastic). Use transparent bags.',
-      ),
-      (
-        type: GarbageType.battery, // ★追加
-        titleJa: '筒型乾電池',
-        titleEn: 'Batteries (Cylindrical)',
-        noteJa: '・アルカリ、マンガン乾電池が対象\n・透明・半透明の袋に入れる\n・「びん・缶・ペット」の日に別袋にして出す',
-        noteEn:
-            'Alkaline/Manganese only. Put in a separate transparent bag on Recyclable days.',
-      ),
-      (
-        type: GarbageType.plastic,
-        titleJa: '容器包装プラスチック',
-        titleEn: 'Plastic Containers',
-        noteJa: '・プラマークがあるもの\n・汚れを洗い流す（落ちない場合は燃やせるごみへ）\n・二重袋にしない',
-        noteEn: 'Items with Plastic mark. Rinse off dirt. Do not double bag.',
-      ),
-      (
-        type: GarbageType.paper, // ★追加
-        titleJa: '雑がみ',
-        titleEn: 'Mixed Paper',
-        noteJa: '・お菓子などの紙箱、封筒、はがき、トイレットペーパーの芯など\n・紙袋に入れるか、ひもで束ねて出す',
-        noteEn:
-            'Paper boxes, envelopes, cores. Put in paper bags or tie with string.',
-      ),
-      (
-        type: GarbageType.green, // ★追加
-        titleJa: '枝・葉・草',
-        titleEn: 'Branches / Grass',
-        noteJa: '・枝は長さ50cmくらいに束ねる\n・草や葉は透明・半透明の袋に入れる\n・生ごみと混ぜない',
-        noteEn:
-            'Bundle branches (approx 50cm). Put grass/leaves in transparent bags. Do not mix with food waste.',
-      ),
+      (type: GarbageType.burnable, key: 'burnable'),
+      (type: GarbageType.spray, key: 'spray'),
+      (type: GarbageType.nonBurnable, key: 'non_burnable'),
+      (type: GarbageType.lighter, key: 'lighter'),
+      (type: GarbageType.recyclable, key: 'recyclable'),
+      (type: GarbageType.battery, key: 'battery'),
+      (type: GarbageType.plastic, key: 'plastic'),
+      (type: GarbageType.paper, key: 'paper'),
+      (type: GarbageType.green, key: 'green'),
     ];
 
     return Container(
@@ -1522,36 +1405,34 @@ class _GarbageGuidePanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.info_outline,
-                size: 20,
-                color: Color(0xFF616161),
-              ),
+              const Icon(Icons.info_outline, size: 20, color: Color(0xFF616161)),
               const SizedBox(width: 8),
               Text(
-                lang == UiLang.ja ? 'ごみの出し方ガイド' : 'Sorting Guide',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+                // ★JSONから取得。なければデフォルトで日本語
+                trans['guide_title'] ?? 'ごみの出し方ガイド',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ],
           ),
           const SizedBox(height: 12),
 
+          // ループで各ゴミのカードを生成
           ...items.map((item) {
+            // ★JSONからタイトルと説明文を取得
+            // 例: "trash_burnable", "note_burnable"
+            final title = trans['trash_${item.key}'] ?? '';
+            final note = trans['note_${item.key}'] ?? '';
+
             return _typeCard(
               type: item.type,
-              title: lang == UiLang.ja ? item.titleJa : item.titleEn,
-              note: lang == UiLang.ja ? item.noteJa : item.noteEn,
+              title: title,
+              note: note,
             );
           }),
 
           const SizedBox(height: 4),
           Text(
-            lang == UiLang.ja
-                ? '※ 詳しくは札幌市の公式ガイドブック等をご確認ください。'
-                : '* Please refer to the official Sapporo City guide for details.',
+            trans['guide_disclaimer'] ?? '※ 詳しくは札幌市の公式ガイドブック等をご確認ください。',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
           ),
         ],
@@ -1560,238 +1441,172 @@ class _GarbageGuidePanel extends StatelessWidget {
   }
 }
 
-// =========================== // セクション区切り
-// ★追加：赤いカード「重要なお知らせ」 // 区ごとに内容が変わる想定
-// =========================== // セクション区切り
-
+// ===========================
+// 重要なお知らせカード
+// ===========================
 class _ImportantNoticeCard extends StatelessWidget {
-  final UiLang lang; // 表示言語（今回は日本語中心だが将来拡張用）
-  final String selectedArea; // 選択中の区（見出し用）
-  final List<String> items; // 表示する箇条書き
+  // ★langではなくtransを受け取る
+  final Map<String, dynamic> trans; 
+  final String selectedArea;
+  
+  // itemsは親から渡さず、ここでtransから取り出す形でもOKですが、
+  // 親で取り出して渡す形を維持するなら以下のようになります。
+  // 今回は「親からリストをもらう」形を維持しつつ、
+  // タイトル部分をJSON化するために trans も受け取れるようにします。
+  final List<String> items;
 
   const _ImportantNoticeCard({
-    required this.lang, // 言語
-    required this.selectedArea, // 区名
-    required this.items, // 内容
-  }); // コンストラクタ終わり
+    required this.trans, // ★追加
+    required this.selectedArea,
+    required this.items,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity, // 横幅いっぱい
-      padding: const EdgeInsets.all(12), // 余白
+      // (装飾部分は変更なし)
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFEBEE), // ★薄い赤（重要を強調）
-        borderRadius: BorderRadius.circular(12), // 角丸
-        border: Border.all(color: const Color(0xFFFFCDD2)), // 赤系の枠線
-      ), // decoration終わり
+        color: const Color(0xFFFFEBEE),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFCDD2)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.error_outline,
-                color: Color(0xFFD32F2F),
-                size: 20,
-              ), // 注意アイコン
-              const SizedBox(width: 8), // 間隔
+              const Icon(Icons.error_outline, color: Color(0xFFD32F2F), size: 20),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  lang == UiLang.ja
-                      ? '重要なお知らせ'
-                      : 'Important notice', // 見出し
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ), // 太字
-                ), // Text終わり
-              ), // Expanded終わり
-            ], // children終わり
-          ), // Row終わり
-          const SizedBox(height: 8), // 間隔
+                  // ★JSONから取得
+                  trans['ui_important_notice'] ?? '重要なお知らせ',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           ...items.map(
             (t) => Padding(
-              padding: const EdgeInsets.only(bottom: 6), // 行間
-              child: Text('・$t', style: const TextStyle(fontSize: 13)), // 箇条書き
-            ), // Padding終わり
-          ), // map展開終わり
-        ], // children終わり
-      ), // Column終わり
-    ); // Container終わり
-  } // build終わり
-} // _ImportantNoticeCard終わり
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('・$t', style: const TextStyle(fontSize: 13)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-// =========================== // セクション区切り
-// ★追加：青いカード「お問い合わせ」 // []内をグレー表示（RichText）
-// =========================== // セクション区切り
-
+// ===========================
+// お問い合わせカード
+// ===========================
 class _InquiryCard extends StatelessWidget {
-  final UiLang lang; // 表示言語（今回は日本語中心だが将来拡張用）
-  final String selectedArea; // 選択中の区（見出し用）
-  final List<String> lines; // 表示する行（[]を含める）
+  final Map<String, dynamic> trans; // ★追加
+  final String selectedArea;
+  final List<String> lines;
 
   const _InquiryCard({
-    required this.lang, // 言語
-    required this.selectedArea, // 区名
-    required this.lines, // 内容
-  }); // コンストラクタ終わり
+    required this.trans, // ★追加
+    required this.selectedArea,
+    required this.lines,
+  });
 
+  // (_spansWithGrayBracketsメソッドは変更なし)
   List<TextSpan> _spansWithGrayBrackets(String text) {
-    // ★[]で囲まれた部分（ブラケット含む）をグレーにするTextSpan生成
-    final spans = <TextSpan>[]; // 出力Spanリスト
-    final reg = RegExp(r'\[[^\]]*\]'); // []部分を丸ごと抜き出す正規表現
-    int idx = 0; // 現在位置
-
-    for (final m in reg.allMatches(text)) {
-      if (m.start > idx) {
-        spans.add(TextSpan(text: text.substring(idx, m.start))); // 通常部分（デフォルト色）
-      } // if終わり
-      spans.add(
-        TextSpan(
-          text: text.substring(m.start, m.end), // []部分（ブラケット含む）
-          style: const TextStyle(color: Color(0xFF757575)), // ★グレー
-        ), // TextSpan終わり
-      ); // add終わり
-      idx = m.end; // 次の開始位置へ
-    } // for終わり
-
-    if (idx < text.length) {
-      spans.add(TextSpan(text: text.substring(idx))); // 末尾の通常部分
-    } // if終わり
-
-    return spans; // Span一覧を返す
-  } // _spansWithGrayBrackets終わり
+     // ... (省略) ...
+     // 元のコードのままでOK
+     final spans = <TextSpan>[];
+     final reg = RegExp(r'\[[^\]]*\]');
+     int idx = 0;
+     for (final m in reg.allMatches(text)) {
+       if (m.start > idx) spans.add(TextSpan(text: text.substring(idx, m.start)));
+       spans.add(TextSpan(text: text.substring(m.start, m.end), style: const TextStyle(color: Color(0xFF757575))));
+       idx = m.end;
+     }
+     if (idx < text.length) spans.add(TextSpan(text: text.substring(idx)));
+     return spans;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity, // 横幅いっぱい
-      padding: const EdgeInsets.all(12), // 余白
+      // (装飾部分は変更なし)
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFE3F2FD), // ★薄い青（問い合わせ）
-        borderRadius: BorderRadius.circular(12), // 角丸
-        border: Border.all(color: const Color(0xFFBBDEFB)), // 青系の枠線
-      ), // decoration終わり
+        color: const Color(0xFFE3F2FD),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBBDEFB)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, // 左寄せ
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.phone_in_talk_outlined,
-                color: Color(0xFF1565C0),
-                size: 20,
-              ), // 電話アイコン
-              const SizedBox(width: 8), // 間隔
+              const Icon(Icons.phone_in_talk_outlined, color: Color(0xFF1565C0), size: 20),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  lang == UiLang.ja
-                      ? 'お問い合わせ'
-                      : 'Contact', // 見出し
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ), // 太字
-                ), // Text終わり
-              ), // Expanded終わり
-            ], // children終わり
-          ), // Row終わり
-          const SizedBox(height: 8), // 間隔
-
+                  // ★JSONから取得
+                  trans['ui_contact'] ?? 'お問い合わせ',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           ...lines.map(
             (line) => Padding(
-              padding: const EdgeInsets.only(bottom: 6), // 行間
+              padding: const EdgeInsets.only(bottom: 6),
               child: RichText(
                 text: TextSpan(
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.black,
-                  ), // デフォルト（黒）
-                  children: _spansWithGrayBrackets(line), // ★[]だけグレーSpan
-                ), // TextSpan終わり
-              ), // RichText終わり
-            ), // Padding終わり
-          ), // map展開終わり
-        ], // children終わり
-      ), // Column終わり
-    ); // Container終わり
-  } // build終わり
-} // _InquiryCard終わり
-
+                  style: const TextStyle(fontSize: 13, color: Colors.black),
+                  children: _spansWithGrayBrackets(line),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 // ===========================
-// ★修正：「今週（選択中の週）のスケジュール」を表示するカード
+// 補助ウィジェット：週間スケジュールカード（修正版）
 // ===========================
 class _WeeklyScheduleCard extends StatelessWidget {
-  final UiLang lang;
-  final DateTime selectedDate; // 選択中の日付（基準日）
+  final Map<String, dynamic> trans; // ★変更: 言語フラグではなく翻訳データを受け取る
+  final DateTime selectedDate; 
   final List<GarbageType> Function(DateTime) garbageTypesOf;
 
   const _WeeklyScheduleCard({
-    required this.lang,
-    required this.selectedDate, // 年(year)ではなく日付を受け取る
+    required this.trans,        // ★変更
+    required this.selectedDate, 
     required this.garbageTypesOf,
   });
 
-  // 曜日ラベル取得
+  // 曜日ラベル取得 (JSONキーに対応)
   String _weekdayLabel(int weekday) {
-    const ja = ['', '月', '火', '水', '木', '金', '土', '日'];
-    const en = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return lang == UiLang.ja ? ja[weekday] : en[weekday];
-  }
-
-  // ゴミの表示名
-  String _garbageLabel(GarbageType type) {
-    if (lang == UiLang.ja) {
-      switch (type) {
-        case GarbageType.burnable:
-          return '燃やせるごみ';
-        case GarbageType.spray:
-          return 'スプレー缶';
-        case GarbageType.nonBurnable:
-          return '燃やせないごみ';
-        case GarbageType.lighter:
-          return 'ライター・電池';
-        case GarbageType.recyclable:
-          return 'びん・缶・ペット';
-        case GarbageType.battery:
-          return '乾電池';
-        case GarbageType.plastic:
-          return 'プラ';
-        case GarbageType.paper:
-          return '雑がみ';
-        case GarbageType.green:
-          return '枝・葉';
-      }
-    } else {
-      switch (type) {
-        case GarbageType.burnable:
-          return 'Burnable';
-        case GarbageType.spray:
-          return 'Spray cans';
-        case GarbageType.nonBurnable:
-          return 'Non-burnable';
-        case GarbageType.lighter:
-          return 'Lighter';
-        case GarbageType.recyclable:
-          return 'Bottles/Cans';
-        case GarbageType.battery:
-          return 'Batteries';
-        case GarbageType.plastic:
-          return 'Plastic';
-        case GarbageType.paper:
-          return 'Paper';
-        case GarbageType.green:
-          return 'Green';
-      }
+    // DateTime.weekday: 1=月, ..., 7=日
+    switch (weekday) {
+      case 1: return trans['mon'] ?? 'Mon';
+      case 2: return trans['tue'] ?? 'Tue';
+      case 3: return trans['wed'] ?? 'Wed';
+      case 4: return trans['thu'] ?? 'Thu';
+      case 5: return trans['fri'] ?? 'Fri';
+      case 6: return trans['sat'] ?? 'Sat';
+      case 7: return trans['sun'] ?? 'Sun';
+      default: return '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     // 基準日が含まれる週の「日曜日」を計算
-    // DateTime.weekdayは 月=1...日=7 なので、% 7 すると 日=0, 月=1...土=6 となる
-    // その日数分引けば、直前の日曜日になる
     final sunday = selectedDate.subtract(
       Duration(days: selectedDate.weekday % 7),
     );
@@ -1823,14 +1638,14 @@ class _WeeklyScheduleCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                lang == UiLang.ja ? '今週のスケジュール' : 'Weekly Schedule',
+                trans['ui_weekly_schedule'] ?? 'Weekly Schedule', // ★JSONキー使用
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
               ),
               const Spacer(),
-              // 期間を表示（例: 1/1 - 1/7）
+              // 期間を表示
               Text(
                 '${weekDays.first.month}/${weekDays.first.day} 〜 ${weekDays.last.month}/${weekDays.last.day}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
@@ -1842,7 +1657,6 @@ class _WeeklyScheduleCard extends StatelessWidget {
           // --- 7日間のリスト ---
           ...weekDays.map((date) {
             final types = garbageTypesOf(date);
-            // 今日かどうか判定
             final isToday =
                 (date.year == selectedDate.year &&
                 date.month == selectedDate.month &&
@@ -1862,20 +1676,16 @@ class _WeeklyScheduleCard extends StatelessWidget {
                 children: [
                   // 日付と曜日
                   SizedBox(
-                    width: 60,
+                    width: 70, // 少し幅を広げました
                     child: Text(
                       '${date.day} (${_weekdayLabel(date.weekday)})',
                       style: TextStyle(
-                        fontWeight: isToday
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                        fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                         color: date.weekday == 7
-                            ? Colors
-                                  .red // 日曜
+                            ? Colors.red
                             : date.weekday == 6
-                            ? Colors
-                                  .blue // 土曜
-                            : Colors.black,
+                                ? Colors.blue
+                                : Colors.black,
                       ),
                     ),
                   ),
@@ -1883,15 +1693,14 @@ class _WeeklyScheduleCard extends StatelessWidget {
                   Expanded(
                     child: types.isEmpty
                         ? Text(
-                            lang == UiLang.ja ? '-' : '-',
+                            '-',
                             style: TextStyle(color: Colors.grey.shade400),
                           )
                         : Text(
-                            types.map((t) => _garbageLabel(t)).join(' / '),
+                            // ★修正: グローバルの garbageLabel 関数を使用
+                            types.map((t) => garbageLabel(t, trans)).join(' / '),
                             style: TextStyle(
-                              fontWeight: isToday
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                              fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                               color: Colors.black87,
                             ),
                           ),

@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:csv/csv.dart';
 import 'notification_service.dart';
-// 権限チェック用（もし未インストールの場合は flutter pub add permission_handler を実行、
-// またはこの行と _checkPermission メソッドを削除してください）
 import 'package:permission_handler/permission_handler.dart';
 
-enum UiLang { ja, en }
+enum UiLang { ja, en, zh, ko, ru, vi, id }
 
-// --- 言語選択ウィジェット (変更なし) ---
+// --- 言語選択ウィジェット (修正版) ---
 class LanguageSelector extends StatelessWidget {
   final UiLang currentLang;
   final ValueChanged<UiLang> onChanged;
@@ -19,51 +17,52 @@ class LanguageSelector extends StatelessWidget {
     required this.onChanged,
   });
 
+  // 言語ラベルを表示するヘルパー関数
+  String _getLangLabel(UiLang lang) {
+    switch (lang) {
+      case UiLang.ja: return '日本語';
+      case UiLang.en: return 'English';
+      case UiLang.zh: return '中文';
+      case UiLang.ko: return '한국어';
+      case UiLang.ru: return 'Русский';
+      case UiLang.vi: return 'Tiếng Việt';
+      case UiLang.id: return 'Bahasa Indonesia';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.only(right: 8), // 余白を調整
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          height: 36, // 高さを指定して他のボタンとサイズ感を合わせる
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: const Color(0xFFE7EBF3),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300), // 薄い枠線を追加してボタンらしくする
+            color: Colors.white, // 背景を白にしてすっきりさせる
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                currentLang == UiLang.ja ? '言語: ' : 'Lang: ',
-                style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold),
-              ),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<UiLang>(
-                  value: currentLang,
-                  isDense: true,
-                  icon: const Icon(
-                    Icons.expand_more,
-                    size: 18,
-                    color: Colors.black,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<UiLang>(
+              value: currentLang,
+              // アイコン（地球儀）を削除し、デフォルトの矢印だけにする
+              // もし矢印も消したい場合は iconSize: 0 にしてください
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+              isDense: true, // ぎゅっと詰めて表示
+              onChanged: (UiLang? newValue) {
+                if (newValue != null) onChanged(newValue);
+              },
+              items: UiLang.values.map((UiLang lang) {
+                return DropdownMenuItem<UiLang>(
+                  value: lang,
+                  child: Text(
+                    _getLangLabel(lang),
+                    style: const TextStyle(fontSize: 13, color: Colors.black87),
                   ),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: UiLang.ja, child: Text('日本語')),
-                    DropdownMenuItem(value: UiLang.en, child: Text('English')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) onChanged(v);
-                  },
-                ),
-              ),
-            ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ),
@@ -71,7 +70,10 @@ class LanguageSelector extends StatelessWidget {
   }
 }
 
-// --- メインメニュー ---
+// --- メインメニュー (変更なし) ---
+// ※以下は元のコードのままです。変更が必要ないので省略して記述します。
+// LeftMenuDrawer クラス以降はそのまま使ってください。
+
 class LeftMenuDrawer extends StatefulWidget {
   final UiLang lang;
   final String selectedArea;
@@ -87,7 +89,6 @@ class LeftMenuDrawer extends StatefulWidget {
 }
 
 class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
-
   // 曜日を言語設定に合わせて変換するメソッド
   String _getWeekdayString(int weekday) {
     if (widget.lang == UiLang.ja) {
@@ -101,8 +102,8 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
   // 設定状態管理用の変数
   bool _isNotificationOn = false;
-  String _targetWard = '中央区'; 
-  String _targetArea = '中央区1'; 
+  String _targetWard = '中央区';
+  String _targetArea = '中央区1';
 
   // 次回の通知予定を表示するためのテキスト
   String _nextScheduleText = '';
@@ -568,7 +569,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
         
         // 2. 「今日」「明日」の判定ロジック
         String dayLabel = dateStr;
-        final now = DateTime.now(); // ※nowが未定義の場合はここで取得、上位にあるなら不要
+        // final now = DateTime.now(); // 既に定義済み
         final tomorrow = DateTime(now.year, now.month, now.day + 1);
         final today = DateTime(now.year, now.month, now.day);
         
@@ -580,7 +581,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           dayLabel = widget.lang == UiLang.ja ? "今日" : "Today";
         }
 
-        // 3. ★追加: ゴミの名前を英語に翻訳するマップ
+        // 3. ゴミの名前を英語に翻訳するマップ
         final Map<String, String> trashNameEn = {
           '燃やせるごみ': 'Burnable',
           '燃やせないごみ': 'Non-burnable',
@@ -591,12 +592,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           // 必要に応じて他のゴミ種別もここに追加
         };
 
-        // 4. ★追加: 言語設定に応じてゴミの名前を切り替え
-        // 日本語ならそのまま、英語ならマップから取得（なければ元のまま）
+        // 4. 言語設定に応じてゴミの名前を切り替え
         String displayTrashName = nearestTrashName;
         if (widget.lang != UiLang.ja) {
-          // 部分一致や完全一致で翻訳を探す（データ構造に合わせて調整してください）
-          // 単純な文字列一致の場合:
           displayTrashName = trashNameEn[nearestTrashName] ?? nearestTrashName;
         }
 
@@ -644,9 +642,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
   String _getTrashNameFromId(int id) {
     switch (id) {
-      case 1: return widget.lang == UiLang.ja ? '燃やせるごみ・スプレー缶類' : 'Burnable・Spray Cans';
-      case 2: return widget.lang == UiLang.ja ? '燃やせないごみ' : 'Non-burnable'; // 短縮
-      case 8: return widget.lang == UiLang.ja ? 'びん・缶・ペット' : 'Bottles/Cans'; // 短縮
+      case 1: return widget.lang == UiLang.ja ? '燃やせるごみ' : 'Burnable'; // 短くしました
+      case 2: return widget.lang == UiLang.ja ? '燃やせないごみ' : 'Non-burnable';
+      case 8: return widget.lang == UiLang.ja ? 'びん・缶・ペット' : 'Bottles/Cans';
       case 9: return widget.lang == UiLang.ja ? 'プラスチック' : 'Plastic';
       case 10: return widget.lang == UiLang.ja ? '雑がみ' : 'Paper';
       case 11: return widget.lang == UiLang.ja ? '枝・葉' : 'Leaves';
