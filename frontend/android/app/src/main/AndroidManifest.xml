@@ -9,7 +9,7 @@
         <!-- ★★★ ここ！！Google Maps APIキー ★★★ -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDvXQRdocDNEWgeJNFuTSHOLWWwx5UE0mU"/>
+            android:value="AIzaSyDoG76rQcCCVbsy1w16bLvnRDU7TOfAniY"/>
 
         <activity
             android:name=".MainActivity"
@@ -36,6 +36,8 @@
             android:value="2" />
 
     </application>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <queries>
         <intent>

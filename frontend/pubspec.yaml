@@ -2,34 +2,41 @@ name: frontend
 description: "Flutter frontend for trash map"
 publish_to: 'none'
 version: 1.0.0+1
+
 environment:
   sdk: ^3.9.2
+
 dependencies:
+  #ural起動
+  url_launcher: ^6.2.5
   flutter:
     sdk: flutter
-  # HTTP通信（Flaskサーバーとの連携用）
+
+  # 位置情報取得（Web対応は自動）
+  geolocator: ^10.1.0
+
+  # HTTP通信
   http: ^1.2.0
-  # カメラ・写真選択機能
+
+  # カメラ・写真選択
   image_picker: ^1.0.7
-  # 通知機能
+
+  # 通知
   flutter_local_notifications: ^17.2.1
-  # HTTP通信（Flaskサーバーとの連携用）
-  http: ^1.2.0
-  # カメラ・写真選択機能
-  image_picker: ^1.0.7
-  # 通知機能
-  flutter_local_notifications: ^17.2.1
-  # Google Maps（地図表示）
+
+  # Google Maps
   google_maps_flutter: ^2.14.0
-  # ローカル保存
+  google_maps_flutter_web: ^0.5.6
+
   # ローカル保存
   shared_preferences: ^2.2.2
-  # iOS風アイコン
-  # iOS風アイコン
+
   cupertino_icons: ^1.0.8
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+
 flutter:
   uses-material-design: true

@@ -6,6 +6,8 @@ import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv 
 import json # AI診断の結果を処理するために必要
+from flask_cors import CORS
+
 
 # ------------------------------------------------------------------
 # 1. 設定と準備 (Configuration)
