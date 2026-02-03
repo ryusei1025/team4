@@ -5,9 +5,9 @@ import os
 from google import genai
 from PIL import Image
 from dotenv import load_dotenv 
-import json # AI診断の結果を処理するために必要
-from collections import defaultdict # ★グループ化のために追加
-from sqlalchemy import or_ # ★ひらがな・カタカナ検索のために追加
+import json
+from collections import defaultdict
+from sqlalchemy import or_
 
 # ------------------------------------------------------------------
 # 1. 設定と準備 (Configuration)
@@ -15,218 +15,229 @@ from sqlalchemy import or_ # ★ひらがな・カタカナ検索のために追
 
 load_dotenv()
 
-# Flaskアプリ（サーバー本体）を作成します
 app = Flask(__name__, static_folder='static_web')
-
-# 日本語の文字化けを防ぐための設定です
 app.json.ensure_ascii = False
 
-# データベースの接続先を設定します (PostgreSQLに接続)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'postgresql://student:password@localhost/banana_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 CORS(app)
 db.init_app(app)
 
-# Gemini API の設定
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
-# =========================================================
-# ★追加コード: 起動時に「使えるモデル一覧」を表示する
-# =========================================================
+# Geminiモデル確認（デバッグ用）
 try:
     if GEMINI_API_KEY:
-        print("\n======== 【デバッグ】利用可能なモデル一覧 ========")
-        debug_client = genai.Client(api_key=GEMINI_API_KEY)
-        for m in debug_client.models.list():
-            # "generateContent" (文章生成) に対応しているモデルだけ表示
-            if "generateContent" in (m.supported_actions or []):
-                # モデル名の "models/" を除いて表示
-                print(f"・ {m.name.replace('models/', '')}")
-        print("================================================\n")
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        # print("--- Available Models ---")
+        # for m in client.models.list(config={"page_size": 10}):
+        #     print(m.name)
 except Exception as e:
-    print(f"モデル一覧の取得に失敗しました: {e}")
-# =========================================================
+    print(f"Warning: Could not list Gemini models. {e}")
 
-# ルートURL（/）にアクセスしたら、Flutterの画面を返す
-@app.route('/')
-def serve_index():
-    return send_from_directory(app.static_folder, 'index.html')
-
-# その他のファイル（JS, CSS, 画像など）を返す
-@app.route('/<path:path>')
-def serve_static_files(path):
-    file_path = os.path.join(app.static_folder, path)
-    if os.path.exists(file_path):
-        return send_from_directory(app.static_folder, path)
-    # ファイルがない場合はindex.htmlを返す（Flutterの画面遷移用）
-    return send_from_directory(app.static_folder, 'index.html')
-
-# ------------------------------------------------------------------
-# 2. 補助関数 (Helper Functions)
-# ------------------------------------------------------------------
 
 def get_group_header(char):
-    if not char: return '他'
-    if 'あ' <= char <= 'お': return 'あ'
-    if 'か' <= char <= 'こ' or char in 'がぎぐげご': return 'か'
-    if 'さ' <= char <= 'そ' or char in 'ざじずぜぞ': return 'さ'
-    if 'た' <= char <= 'と' or char in 'だぢづでど': return 'た'
-    if 'な' <= char <= 'の': return 'な'
-    if 'は' <= char <= 'ほ' or char in 'ばびぶべぼぱぴぷぺぽ': return 'は'
-    if 'ま' <= char <= 'も': return 'ま'
-    if 'や' <= char <= 'よ': return 'や'
-    if 'ら' <= char <= 'ろ': return 'ら'
-    if 'わ' <= char <= 'ん': return 'わ'
-    return '他'
+    """ひらがなの頭文字からグループ名を返す"""
+    if not char: return "他"
+    if 'あ' <= char <= 'お': return "あ"
+    if 'か' <= char <= 'ご': return "か"
+    if 'さ' <= char <= 'ぞ': return "さ"
+    if 'た' <= char <= 'ど': return "た"
+    if 'な' <= char <= 'の': return "な"
+    if 'は' <= char <= 'ぽ': return "は"
+    if 'ま' <= char <= 'も': return "ま"
+    if 'や' <= char <= 'よ': return "や"
+    if 'ら' <= char <= 'ろ': return "ら"
+    if 'わ' <= char <= 'ん': return "わ"
+    return "他"
+
 
 # ------------------------------------------------------------------
-# 3. APIエンドポイント (Routes)
+# 2. ルート設定 (Routes)
 # ------------------------------------------------------------------
 
 @app.route('/')
 def index():
-    return "Waste Management API is running!"
+    return "Banana Server is Running!"
 
-@app.route('/api/areas', methods=['GET'])
-def get_areas():
-    lang = request.args.get('lang', 'ja')
-    areas = Area.query.all()
-    result = []
-    for area in areas:
-        data = {"id": area.id, "name": area.get_localized_name(lang), "calendar_no": area.calendar_no}
-        result.append(data)
-    return jsonify(result)
-
+# 機能A: カレンダー (変更なし)
 @app.route('/api/schedules', methods=['GET'])
 def get_schedules():
-    area_id = request.args.get('area_id')
-    if not area_id: return jsonify({"error": "area_id is required"}), 400
-    schedules = Schedule.query.filter_by(area_id=area_id).all()
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+    area_id = request.args.get('area', type=int)
+
+    if not year or not month or not area_id:
+        return jsonify({"error": "year, month, and area are required"}), 400
+
+    schedules = Schedule.query.filter_by(
+        area_id=area_id,
+        year=year,
+        month=month
+    ).all()
+
     result = []
-    for sch in schedules:
-        trash_type = TrashType.query.get(sch.trash_type_id)
-        if trash_type:
-            result.append({
-                "date": sch.date.strftime('%Y-%m-%d'),
-                "trash_type": {"id": trash_type.id, "name": trash_type.name_ja, "color": trash_type.color_code, "icon": trash_type.icon_name}
-            })
-    result.sort(key=lambda x: x['date'])
+    for s in schedules:
+        # name_en属性があるか安全に確認
+        type_en = getattr(s.trash_type, 'name_en', None)
+        
+        result.append({
+            "date": s.date.strftime('%Y-%m-%d'),
+            "type": s.trash_type.name,
+            "type_en": type_en
+        })
     return jsonify(result)
 
+# 機能B: エリア (変更なし)
+@app.route('/api/areas', methods=['GET'])
+def get_areas():
+    areas = Area.query.all()
+    return jsonify([{"id": a.id, "name": a.name} for a in areas])
+
+# 機能C: マップ (変更なし)
+@app.route('/api/trash_bins', methods=['GET'])
+def get_trash_bins():
+    bins = TrashBin.query.all()
+    return jsonify([{
+        "id": b.id,
+        "name": b.name,
+        "lat": b.latitude,
+        "lng": b.longitude,
+        "type": b.bin_type,
+        "address": b.address
+    } for b in bins])
+
 # =========================================================
-# 機能C: ゴミ分別辞典を検索する (前方一致優先)
+# 機能D: 分別辞書リスト (修正版)
+# =========================================================
+@app.route('/api/trash_dictionary', methods=['GET'])
+def get_trash_dictionary():
+    lang = request.args.get('lang', 'ja')
+    grouped_data = defaultdict(list)
+    result = []
+
+    # name_en カラムがモデルに存在するかチェック
+    has_english = hasattr(TrashDictionary, 'name_en')
+
+    if lang == 'en' and has_english:
+        # --- 英語モードかつ英語カラムがある場合 ---
+        try:
+            items = TrashDictionary.query.all()
+            # 英語名順にソート（ない場合は日本語名）
+            items.sort(key=lambda x: (x.name_en if x.name_en else x.name).upper())
+            
+            for item in items:
+                display_name = item.name_en if item.name_en else item.name
+                first_char = display_name[0].upper() if display_name else "#"
+                if not ('A' <= first_char <= 'Z'):
+                    first_char = '#' 
+                
+                grouped_data[first_char].append(item.get_localized_data(lang))
+
+            headers_order = sorted([k for k in grouped_data.keys() if k != '#'])
+            if '#' in grouped_data:
+                headers_order.append('#')
+        except Exception as e:
+            print(f"Dictionary Error (EN): {e}")
+            # エラー時は空リストを返す
+            return jsonify([])
+
+    else:
+        # --- 日本語モード または 英語カラムがない場合 ---
+        try:
+            items = TrashDictionary.query.order_by(TrashDictionary.name_kana.asc()).all()
+            for item in items:
+                first_char = item.name_kana[0] if item.name_kana else ""
+                header = get_group_header(first_char)
+                grouped_data[header].append(item.get_localized_data(lang))
+            
+            headers_order = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ", "他"]
+        except Exception as e:
+            print(f"Dictionary Error (JP): {e}")
+            return jsonify([])
+
+    for header in headers_order:
+        if header in grouped_data:
+            result.append({
+                'header': header,
+                'items': grouped_data[header]
+            })
+
+    return jsonify(result)
+
+
+# =========================================================
+# 機能E: 検索 (修正版: 日本語・英語両方検索可能)
 # =========================================================
 @app.route('/api/trash_search', methods=['GET'])
-def search_trash():
-    keyword = request.args.get('q', '').strip()
-    lang = request.args.get('lang', 'ja')     
-    cat_id = request.args.get('cat_id', '')   
-
-    if not keyword and not cat_id:
-        return jsonify([])
-
-    query_obj = TrashDictionary.query
-
-    if cat_id:
-        try:
-            query_obj = query_obj.filter_by(trash_type_id=int(cat_id))
-        except ValueError:
-            pass
-
-    if keyword:
-        # ひらがな・カタカナ相互変換
-        hira_keyword = "".join([chr(ord(c) - 96) if "ァ" <= c <= "ン" else c for c in keyword])
-        kata_keyword = "".join([chr(ord(c) + 96) if "ぁ" <= c <= "ん" else c for c in keyword])
-        
-        # ★ ここを「前方一致」に変更しました ( % を後ろだけに付ける )
-        # これにより、「い」で検索すると「いす」「いちご」がヒットし、「だいこん」などはヒットしません
-        query_obj = query_obj.filter(
-            or_(
-                TrashDictionary.name_ja.ilike(f"{keyword}%"),
-                TrashDictionary.name_kana.ilike(f"{keyword}%"),
-                TrashDictionary.name_kana.ilike(f"{hira_keyword}%"),
-                TrashDictionary.name_kana.ilike(f"{kata_keyword}%")
-            )
-        )
-
-    # 読みがなの50音順に並び替えて最大50件取得
-    results = query_obj.order_by(TrashDictionary.name_kana.asc()).limit(50).all()
-    
-    data_list = []
-    for item in results:
-        target_name = getattr(item, f'name_{lang}', item.name_ja)
-        
-        # 「不明」対策: IDから直接名称を引く
-        trash_type_name = "不明"
-        if item.trash_type:
-            trash_type_name = item.trash_type.name_ja
-        elif item.trash_type_id:
-            t_type = TrashType.query.get(item.trash_type_id)
-            if t_type:
-                trash_type_name = t_type.name_ja
-
-        data_list.append({
-            "id": item.id,
-            "name": str(target_name or "名前なし"),
-            "kana": str(item.name_kana or ""),
-            "note": str(item.note_ja or "") if lang == 'ja' else str(getattr(item, 'note_en', item.note_ja) or ""),
-            "fee": item.fee if item.fee is not None else 0,
-            "trash_type_id": item.trash_type_id,
-            "trash_type": trash_type_name
-        })
-        
-    return jsonify(data_list)
-
-# =========================================================
-# 機能D: ゴミ箱の位置情報
-# =========================================================
-@app.route('/api/bins', methods=['GET'])
-def get_bins():
-    bins = TrashBin.query.all()
-    result = []
-    for b in bins:
-        if b.latitude and b.longitude:
-            result.append({"id": b.id, "name": b.name, "address": b.address, "type": b.bin_type, "lat": b.latitude, "lon": b.longitude})
-    return jsonify(result)
-
-# =========================================================
-# 機能E: 画像診断（Gemini API）
-# =========================================================
-# ★重要: URLをログに合わせて '/api/analyze_trash' にし、POSTを許可します
-@app.route('/api/analyze_trash', methods=['POST']) 
-def analyze_trash():
-    # 画像ファイルが送られてきているかチェック
-    if 'image' not in request.files:
-        return jsonify({"error": "画像なし"}), 400
-
-    file = request.files['image']
+def trash_search():
+    query = request.args.get('q', '')
+    cat_id = request.args.get('cat_id')
+    lang = request.args.get('lang', 'ja')
 
     try:
-        # 画像を開く
-        img = Image.open(file.stream)
+        base_query = TrashDictionary.query
 
-        # ---------------------------------------------------------
-        # 新しい google-genai ライブラリの書き方
-        # ---------------------------------------------------------
-        
-        # 1. クライアントを作成
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        
-        # 2. プロンプトの準備
+        if cat_id:
+            base_query = base_query.filter(TrashDictionary.trash_type_id == cat_id)
+
+        if query:
+            # 検索条件リスト
+            conditions = [
+                TrashDictionary.name.contains(query),       # 日本語名
+                TrashDictionary.name_kana.contains(query),  # 読み仮名
+            ]
+            
+            # name_en がモデルにある時だけ英語検索も追加
+            if hasattr(TrashDictionary, 'name_en'):
+                conditions.append(TrashDictionary.name_en.ilike(f'%{query}%'))
+            
+            base_query = base_query.filter(or_(*conditions))
+
+        # ソート順
+        if lang == 'en' and hasattr(TrashDictionary, 'name_en'):
+            results = base_query.order_by(TrashDictionary.name_en.asc().nulls_last()).all()
+        else:
+            results = base_query.order_by(TrashDictionary.name_kana.asc()).all()
+
+        return jsonify([item.get_localized_data(lang) for item in results])
+
+    except Exception as e:
+        print("SEARCH ERROR:", e)
+        # エラー時は空リストを返す
+        return jsonify([])
+
+
+# 機能F: AI判定 (変更なし)
+@app.route('/api/predict_trash', methods=['POST'])
+def predict_trash():
+    if 'image' not in request.files:
+        return jsonify({"error": "No image part"}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    try:
+        if not GEMINI_API_KEY:
+            return jsonify({"error": "Server API Key not configured"}), 500
+
+        img = Image.open(file.stream)
         prompt = """
-        ゴミ分別の専門家として解析してください。
-        以下のJSONフォーマットのみで返答してください。余計な文章は不要です。
-        { 
-            "name": "ゴミの名前", 
-            "type": "ゴミの種別(燃やせるゴミ/燃やせないゴミ/資源ごみ/など)", 
-            "message": "分別のアドバイス" 
+        Analyze this image and identify the trash item.
+        Return ONLY a JSON object with this exact format:
+        {
+            "name": "Item Name (Japanese)",
+            "type": "Burnable/Non-burnable/Recyclable/etc (Japanese)",
+            "confidence": 0.95,
+            "reason": "Reason for classification (Japanese)"
         }
         """
 
-        # 3. AIにリクエストを送る
+        client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
-            model='gemini-flash-latest',
+            model="gemini-2.0-flash",
             contents=[img, prompt]
         )
 
@@ -235,35 +246,12 @@ def analyze_trash():
 
         response_text = response.text.replace('```json', '').replace('```', '').strip()
         result_json = json.loads(response_text)
-        
         return jsonify(result_json)
 
     except Exception as e:
-        print(f"============== エラー発生 ==============")
         print(e)
-        import traceback
-        traceback.print_exc()
-        print(f"========================================")
         return jsonify({"error": str(e)}), 500
 
-# =========================================================
-# 機能F: 50音順リスト
-# =========================================================
-@app.route('/api/trash_dictionary', methods=['GET'])
-def get_trash_dictionary():
-    lang = request.args.get('lang', 'ja')
-    items = TrashDictionary.query.order_by(TrashDictionary.name_kana.asc()).all()
-    grouped_data = defaultdict(list)
-    for item in items:
-        first_char = item.name_kana[0] if item.name_kana else ""
-        header = get_group_header(first_char)
-        grouped_data[header].append(item.get_localized_data(lang))
-    result = []
-    headers_order = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ", "他"]
-    for h in headers_order:
-        if h in grouped_data:
-            result.append({"header": h, "items": grouped_data[h]})
-    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

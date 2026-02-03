@@ -207,7 +207,6 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-
   // 翻訳データを保持するマップ
   Map<String, dynamic> _trans = {};
 
@@ -272,9 +271,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     try {
       // JSONファイルを読み込む
-      String jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      String jsonString = await rootBundle.loadString(
+        'assets/translations/$langCode.json',
+      );
       Map<String, dynamic> jsonMap = json.decode(jsonString);
-      
+
       setState(() {
         _trans = jsonMap;
         _lang = lang; // 言語状態も更新
@@ -284,7 +285,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       // エラー時は日本語をデフォルトにするなどの処理
     }
   }
-
 
   // ★【追加】読み込んだスケジュールデータ（日付 -> ゴミ種別リスト）
   Map<DateTime, List<GarbageType>> _scheduleCache = {};
@@ -507,8 +507,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     // 2. 収集なしの場合
     if (types.isEmpty) {
-      return _trans['no_collection'] ?? 
-            (_lang == UiLang.ja ? '収集なし' : 'No collection');
+      return _trans['no_collection'] ??
+          (_lang == UiLang.ja ? '収集なし' : 'No collection');
     }
 
     // 3. ゴミ種別を文字に変換して連結（例：「燃やせるごみ・プラスチック」）
@@ -613,7 +613,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -623,7 +623,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
       appBar: AppBar(
         centerTitle: true,
         titleSpacing: 0,
-        backgroundColor: const Color.fromARGB(255, 0, 221, 192).withOpacity(0.8),
+        backgroundColor: const Color.fromARGB(
+          255,
+          0,
+          221,
+          192,
+        ).withOpacity(0.8),
         leading: Builder(
           builder: (ctx) => IconButton(
             icon: const Icon(Icons.menu),
@@ -646,9 +651,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   items: _wardList,
                   // ★修正: リストの中身の表示名を言語で切り替え
                   // 日本語ならそのまま(v)、英語ならマップから変換(_wardNamesEn[v])
-                  itemLabel: (v) => _lang == UiLang.ja
-                      ? v
-                      : (_wardNamesEn[v] ?? v),
+                  itemLabel: (v) =>
+                      _lang == UiLang.ja ? v : (_wardNamesEn[v] ?? v),
                   width: null,
                   onChanged: (newWard) {
                     setState(() {
@@ -693,7 +697,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.map_outlined, size: 20, color: Colors.blueGrey),
+                  icon: const Icon(
+                    Icons.map_outlined,
+                    size: 20,
+                    color: Colors.blueGrey,
+                  ),
                   // ツールチップの翻訳
                   tooltip: _lang == UiLang.ja ? '地図を確認' : 'Check Map',
                   onPressed: _showAreaMapDialog,
@@ -708,7 +716,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: LanguageSelector(
               currentLang: _lang,
               onChanged: (v) {
-                _loadTranslations(v); 
+                _loadTranslations(v);
               },
             ),
           ),
@@ -741,9 +749,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             Row(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.arrow_back_ios, size: 16),
+                                  icon: const Icon(
+                                    Icons.arrow_back_ios,
+                                    size: 16,
+                                  ),
                                   onPressed: _visibleYear > baseYear
-                                      ? () => _jumpToMonth(_visibleYear - 1, _visibleMonth)
+                                      ? () => _jumpToMonth(
+                                          _visibleYear - 1,
+                                          _visibleMonth,
+                                        )
                                       : null,
                                 ),
                                 // ★修正: 「年」の表示切り替え
@@ -757,9 +771,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   ),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                                  icon: const Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 16,
+                                  ),
                                   onPressed: _visibleYear < maxYear
-                                      ? () => _jumpToMonth(_visibleYear + 1, _visibleMonth)
+                                      ? () => _jumpToMonth(
+                                          _visibleYear + 1,
+                                          _visibleMonth,
+                                        )
                                       : null,
                                 ),
                               ],
@@ -791,7 +811,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFCED6E6)),
+                              border: Border.all(
+                                color: const Color(0xFFCED6E6),
+                              ),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: Column(
@@ -822,7 +844,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                           month: month,
                                           selectedDate: _selectedDate,
                                           garbageTypesOf: _garbageTypesFor,
-                                          onDateTap: (d) => _onDateTap(d, currentMonth: month),
+                                          onDateTap: (d) => _onDateTap(
+                                            d,
+                                            currentMonth: month,
+                                          ),
                                           lang: _lang,
                                         );
                                       },
@@ -1362,12 +1387,18 @@ class _GarbageGuidePanel extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   note,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF424242)),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF424242),
+                  ),
                 ),
               ],
             ),
@@ -1405,12 +1436,19 @@ class _GarbageGuidePanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.info_outline, size: 20, color: Color(0xFF616161)),
+              const Icon(
+                Icons.info_outline,
+                size: 20,
+                color: Color(0xFF616161),
+              ),
               const SizedBox(width: 8),
               Text(
                 // ★JSONから取得。なければデフォルトで日本語
                 trans['guide_title'] ?? 'ごみの出し方ガイド',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
@@ -1423,11 +1461,7 @@ class _GarbageGuidePanel extends StatelessWidget {
             final title = trans['trash_${item.key}'] ?? '';
             final note = trans['note_${item.key}'] ?? '';
 
-            return _typeCard(
-              type: item.type,
-              title: title,
-              note: note,
-            );
+            return _typeCard(type: item.type, title: title, note: note);
           }),
 
           const SizedBox(height: 4),
@@ -1446,9 +1480,9 @@ class _GarbageGuidePanel extends StatelessWidget {
 // ===========================
 class _ImportantNoticeCard extends StatelessWidget {
   // ★langではなくtransを受け取る
-  final Map<String, dynamic> trans; 
+  final Map<String, dynamic> trans;
   final String selectedArea;
-  
+
   // itemsは親から渡さず、ここでtransから取り出す形でもOKですが、
   // 親で取り出して渡す形を維持するなら以下のようになります。
   // 今回は「親からリストをもらう」形を維持しつつ、
@@ -1477,13 +1511,20 @@ class _ImportantNoticeCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.error_outline, color: Color(0xFFD32F2F), size: 20),
+              const Icon(
+                Icons.error_outline,
+                color: Color(0xFFD32F2F),
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   // ★JSONから取得
                   trans['ui_important_notice'] ?? '重要なお知らせ',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],
@@ -1517,18 +1558,24 @@ class _InquiryCard extends StatelessWidget {
 
   // (_spansWithGrayBracketsメソッドは変更なし)
   List<TextSpan> _spansWithGrayBrackets(String text) {
-     // ... (省略) ...
-     // 元のコードのままでOK
-     final spans = <TextSpan>[];
-     final reg = RegExp(r'\[[^\]]*\]');
-     int idx = 0;
-     for (final m in reg.allMatches(text)) {
-       if (m.start > idx) spans.add(TextSpan(text: text.substring(idx, m.start)));
-       spans.add(TextSpan(text: text.substring(m.start, m.end), style: const TextStyle(color: Color(0xFF757575))));
-       idx = m.end;
-     }
-     if (idx < text.length) spans.add(TextSpan(text: text.substring(idx)));
-     return spans;
+    // ... (省略) ...
+    // 元のコードのままでOK
+    final spans = <TextSpan>[];
+    final reg = RegExp(r'\[[^\]]*\]');
+    int idx = 0;
+    for (final m in reg.allMatches(text)) {
+      if (m.start > idx)
+        spans.add(TextSpan(text: text.substring(idx, m.start)));
+      spans.add(
+        TextSpan(
+          text: text.substring(m.start, m.end),
+          style: const TextStyle(color: Color(0xFF757575)),
+        ),
+      );
+      idx = m.end;
+    }
+    if (idx < text.length) spans.add(TextSpan(text: text.substring(idx)));
+    return spans;
   }
 
   @override
@@ -1547,13 +1594,20 @@ class _InquiryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.phone_in_talk_outlined, color: Color(0xFF1565C0), size: 20),
+              const Icon(
+                Icons.phone_in_talk_outlined,
+                color: Color(0xFF1565C0),
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   // ★JSONから取得
                   trans['ui_contact'] ?? 'お問い合わせ',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],
@@ -1575,17 +1629,18 @@ class _InquiryCard extends StatelessWidget {
     );
   }
 }
+
 // ===========================
 // 補助ウィジェット：週間スケジュールカード（修正版）
 // ===========================
 class _WeeklyScheduleCard extends StatelessWidget {
   final Map<String, dynamic> trans; // ★変更: 言語フラグではなく翻訳データを受け取る
-  final DateTime selectedDate; 
+  final DateTime selectedDate;
   final List<GarbageType> Function(DateTime) garbageTypesOf;
 
   const _WeeklyScheduleCard({
-    required this.trans,        // ★変更
-    required this.selectedDate, 
+    required this.trans, // ★変更
+    required this.selectedDate,
     required this.garbageTypesOf,
   });
 
@@ -1593,14 +1648,22 @@ class _WeeklyScheduleCard extends StatelessWidget {
   String _weekdayLabel(int weekday) {
     // DateTime.weekday: 1=月, ..., 7=日
     switch (weekday) {
-      case 1: return trans['mon'] ?? 'Mon';
-      case 2: return trans['tue'] ?? 'Tue';
-      case 3: return trans['wed'] ?? 'Wed';
-      case 4: return trans['thu'] ?? 'Thu';
-      case 5: return trans['fri'] ?? 'Fri';
-      case 6: return trans['sat'] ?? 'Sat';
-      case 7: return trans['sun'] ?? 'Sun';
-      default: return '';
+      case 1:
+        return trans['mon'] ?? 'Mon';
+      case 2:
+        return trans['tue'] ?? 'Tue';
+      case 3:
+        return trans['wed'] ?? 'Wed';
+      case 4:
+        return trans['thu'] ?? 'Thu';
+      case 5:
+        return trans['fri'] ?? 'Fri';
+      case 6:
+        return trans['sat'] ?? 'Sat';
+      case 7:
+        return trans['sun'] ?? 'Sun';
+      default:
+        return '';
     }
   }
 
@@ -1680,12 +1743,14 @@ class _WeeklyScheduleCard extends StatelessWidget {
                     child: Text(
                       '${date.day} (${_weekdayLabel(date.weekday)})',
                       style: TextStyle(
-                        fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: isToday
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                         color: date.weekday == 7
                             ? Colors.red
                             : date.weekday == 6
-                                ? Colors.blue
-                                : Colors.black,
+                            ? Colors.blue
+                            : Colors.black,
                       ),
                     ),
                   ),
@@ -1698,9 +1763,13 @@ class _WeeklyScheduleCard extends StatelessWidget {
                           )
                         : Text(
                             // ★修正: グローバルの garbageLabel 関数を使用
-                            types.map((t) => garbageLabel(t, trans)).join(' / '),
+                            types
+                                .map((t) => garbageLabel(t, trans))
+                                .join(' / '),
                             style: TextStyle(
-                              fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isToday
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: Colors.black87,
                             ),
                           ),

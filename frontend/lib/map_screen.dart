@@ -6,6 +6,37 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'trash_bin_api.dart';
 import 'drawer_menu.dart';
+import 'constants.dart';
+
+// ゴミ箱データモデル
+class TrashBin {
+  final int id;
+  final String name;
+  final String address;
+  final double lat;
+  final double lng;
+  final String type;
+
+  TrashBin({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.lat,
+    required this.lng,
+    required this.type,
+  });
+
+  factory TrashBin.fromJson(Map<String, dynamic> json) {
+    return TrashBin(
+      id: json['id'] ?? 0,
+      name: json['name'] ?? '',
+      address: json['address'] ?? '',
+      lat: (json['lat'] ?? 0.0).toDouble(),
+      lng: (json['lng'] ?? 0.0).toDouble(),
+      type: json['type'] ?? 'unknown',
+    );
+  }
+}
 
 class TrashBinMapScreen extends StatefulWidget {
   const TrashBinMapScreen({super.key});
@@ -62,12 +93,12 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
         _searchedBins = [];
       } else {
         _searchedBins = _allBins.where((bin) {
-          final name =
-              bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-          final address =
-              bin.address.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-          return name.contains(normalized) ||
-              address.contains(normalized);
+          final name = bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+          final address = bin.address.toLowerCase().replaceAll(
+            RegExp(r'\s+'),
+            '',
+          );
+          return name.contains(normalized) || address.contains(normalized);
         }).toList();
       }
     });
@@ -90,8 +121,10 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   /// 絞り込み適用
   /// ======================
   void _applyFilters() {
-    final active =
-        _filters.entries.where((e) => e.value).map((e) => e.key).toList();
+    final active = _filters.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
 
     setState(() {
       if (active.isEmpty) {
@@ -169,8 +202,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
           children: [
             Text(
               bin.name,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(bin.address),
@@ -180,17 +212,14 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
               icon: const Icon(Icons.map),
               label: const Text('Googleマップで開く'),
               onPressed: () async {
-                final query = Uri.encodeComponent(
-                  '${bin.name} ${bin.address}',
-                );
+                final query = Uri.encodeComponent('${bin.name} ${bin.address}');
 
                 final uri = Uri.parse(
                   'https://www.google.com/maps/search/?api=1&query=$query',
                 );
 
                 if (await canLaunchUrl(uri)) {
-                  launchUrl(uri,
-                      mode: LaunchMode.externalApplication);
+                  launchUrl(uri, mode: LaunchMode.externalApplication);
                 }
               },
             ),
@@ -222,8 +251,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                 children: [
                   const Text(
                     '絞り込み',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
 
@@ -280,16 +308,13 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   /// ======================
   @override
   Widget build(BuildContext context) {
+    final isJa = _lang == UiLang.ja;
+
     return Scaffold(
       // ★ 追加：メニューバー復活
-      appBar: AppBar(
-        elevation: 0,
-      ),
+      appBar: AppBar(elevation: 0),
 
-      drawer: const LeftMenuDrawer(
-        lang: UiLang.ja,
-        selectedArea: '札幌市',
-      ),
+      drawer: const LeftMenuDrawer(lang: UiLang.ja, selectedArea: '札幌市'),
 
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
@@ -308,8 +333,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                     hintText: '地域を検索',
                     prefixIcon: Icon(Icons.search),
                     border: InputBorder.none,
-                    contentPadding:
-                        EdgeInsets.symmetric(vertical: 14),
+                    contentPadding: EdgeInsets.symmetric(vertical: 14),
                   ),
                 ),
               ),

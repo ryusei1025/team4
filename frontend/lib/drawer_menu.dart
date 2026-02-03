@@ -20,13 +20,20 @@ class LanguageSelector extends StatelessWidget {
   // 言語ラベルを表示するヘルパー関数
   String _getLangLabel(UiLang lang) {
     switch (lang) {
-      case UiLang.ja: return '日本語';
-      case UiLang.en: return 'English';
-      case UiLang.zh: return '中文';
-      case UiLang.ko: return '한국어';
-      case UiLang.ru: return 'Русский';
-      case UiLang.vi: return 'Tiếng Việt';
-      case UiLang.id: return 'Bahasa Indonesia';
+      case UiLang.ja:
+        return '日本語';
+      case UiLang.en:
+        return 'English';
+      case UiLang.zh:
+        return '中文';
+      case UiLang.ko:
+        return '한국어';
+      case UiLang.ru:
+        return 'Русский';
+      case UiLang.vi:
+        return 'Tiếng Việt';
+      case UiLang.id:
+        return 'Bahasa Indonesia';
     }
   }
 
@@ -40,7 +47,9 @@ class LanguageSelector extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300), // 薄い枠線を追加してボタンらしくする
+            border: Border.all(
+              color: Colors.grey.shade300,
+            ), // 薄い枠線を追加してボタンらしくする
             color: Colors.white, // 背景を白にしてすっきりさせる
           ),
           child: DropdownButtonHideUnderline(
@@ -77,11 +86,13 @@ class LanguageSelector extends StatelessWidget {
 class LeftMenuDrawer extends StatefulWidget {
   final UiLang lang;
   final String selectedArea;
+  final ValueChanged<UiLang> onLangChanged; // ★ これがないとエラーになります
 
   const LeftMenuDrawer({
     super.key,
     required this.lang,
     required this.selectedArea,
+    required this.onLangChanged, // ★ 必須
   });
 
   @override
@@ -110,7 +121,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
   // 時刻設定用の変数
   bool _notifyDayBefore = true; // 前日
-  bool _notifyDayOf = true;     // 当日
+  bool _notifyDayOf = true; // 当日
   TimeOfDay _timeDayBefore = const TimeOfDay(hour: 21, minute: 0);
   TimeOfDay _timeDayOf = const TimeOfDay(hour: 8, minute: 0);
 
@@ -132,7 +143,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
   void initState() {
     super.initState();
     _loadSettings();
-    
+
     // 通知権限の初期化
     final service = NotificationService();
     service.init();
@@ -144,14 +155,18 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     setState(() {
       _isNotificationOn = prefs.getBool('noti_is_on') ?? false;
       _targetWard = prefs.getString('noti_ward') ?? _areaData.keys.first;
-      _targetArea = prefs.getString('noti_area') ?? _areaData[_targetWard]!.first;
+      _targetArea =
+          prefs.getString('noti_area') ?? _areaData[_targetWard]!.first;
       _notifyDayBefore = prefs.getBool('noti_day_before') ?? true;
       _notifyDayOf = prefs.getBool('noti_day_of') ?? true;
-      
+
       final tb = prefs.getString('noti_time_before');
       if (tb != null) {
         final p = tb.split(':');
-        _timeDayBefore = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+        _timeDayBefore = TimeOfDay(
+          hour: int.parse(p[0]),
+          minute: int.parse(p[1]),
+        );
       }
       final to = prefs.getString('noti_time_of');
       if (to != null) {
@@ -171,8 +186,14 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     await prefs.setString('noti_area', _targetArea);
     await prefs.setBool('noti_day_before', _notifyDayBefore);
     await prefs.setBool('noti_day_of', _notifyDayOf);
-    await prefs.setString('noti_time_before', '${_timeDayBefore.hour}:${_timeDayBefore.minute}');
-    await prefs.setString('noti_time_of', '${_timeDayOf.hour}:${_timeDayOf.minute}');
+    await prefs.setString(
+      'noti_time_before',
+      '${_timeDayBefore.hour}:${_timeDayBefore.minute}',
+    );
+    await prefs.setString(
+      'noti_time_of',
+      '${_timeDayOf.hour}:${_timeDayOf.minute}',
+    );
     // 次回の予定テキストも保存
     await prefs.setString('noti_next_text', _nextScheduleText);
   }
@@ -196,7 +217,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
   Future<bool> _checkPermission() async {
     // permission_handlerを使用
     var status = await Permission.notification.status;
-    
+
     if (status.isDenied) {
       // まだ聞いていない、あるいは一度拒否された場合
       status = await Permission.notification.request();
@@ -208,10 +229,14 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(widget.lang == UiLang.ja ? '通知が無効です' : 'Notifications Disabled'),
-            content: Text(widget.lang == UiLang.ja 
-              ? '通知を受け取るには、設定画面で通知を許可してください。' 
-              : 'Please enable notifications in settings to receive alerts.'),
+            title: Text(
+              widget.lang == UiLang.ja ? '通知が無効です' : 'Notifications Disabled',
+            ),
+            content: Text(
+              widget.lang == UiLang.ja
+                  ? '通知を受け取るには、設定画面で通知を許可してください。'
+                  : 'Please enable notifications in settings to receive alerts.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -222,7 +247,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   Navigator.pop(ctx);
                   openAppSettings(); // 設定画面を開く
                 },
-                child: Text(widget.lang == UiLang.ja ? '設定を開く' : 'Open Settings'),
+                child: Text(
+                  widget.lang == UiLang.ja ? '設定を開く' : 'Open Settings',
+                ),
               ),
             ],
           ),
@@ -244,7 +271,11 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     await NotificationService().cancelAll();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.lang == UiLang.ja ? '通知をOFFにしました' : 'Notifications OFF')),
+        SnackBar(
+          content: Text(
+            widget.lang == UiLang.ja ? '通知をOFFにしました' : 'Notifications OFF',
+          ),
+        ),
       );
     }
   }
@@ -280,9 +311,11 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(widget.lang == UiLang.ja 
-                    ? 'ゴミ出しカレンダーの地域を選択してください' 
-                    : 'Select your garbage collection area'),
+                  Text(
+                    widget.lang == UiLang.ja
+                        ? 'ゴミ出しカレンダーの地域を選択してください'
+                        : 'Select your garbage collection area',
+                  ),
                   const SizedBox(height: 20),
                   DropdownButton<String>(
                     isExpanded: true,
@@ -315,7 +348,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context); 
+                    Navigator.pop(context);
                   },
                   child: Text(widget.lang == UiLang.ja ? 'キャンセル' : 'Cancel'),
                 ),
@@ -357,22 +390,28 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
               );
               if (picked != null) {
                 setStateDialog(() {
-                  if (isBefore) tempTimeBefore = picked;
-                  else tempTimeOf = picked;
+                  if (isBefore)
+                    tempTimeBefore = picked;
+                  else
+                    tempTimeOf = picked;
                 });
               }
             }
 
             return AlertDialog(
-              title: Text(widget.lang == UiLang.ja ? '通知時刻の設定' : 'Time Settings'),
+              title: Text(
+                widget.lang == UiLang.ja ? '通知時刻の設定' : 'Time Settings',
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(widget.lang == UiLang.ja 
-                      ? '通知を受け取るタイミングを選択してください' 
-                      : 'Select when to be notified'),
+                  Text(
+                    widget.lang == UiLang.ja
+                        ? '通知を受け取るタイミングを選択してください'
+                        : 'Select when to be notified',
+                  ),
                   const SizedBox(height: 10),
-                  
+
                   CheckboxListTile(
                     title: Text(widget.lang == UiLang.ja ? '前日' : 'Day Before'),
                     value: tempDayBefore,
@@ -383,9 +422,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   if (tempDayBefore)
                     ListTile(
                       title: Text(
-                        widget.lang == UiLang.ja 
-                          ? '時刻: ${tempTimeBefore.format(context)}' 
-                          : 'Time: ${tempTimeBefore.format(context)}',
+                        widget.lang == UiLang.ja
+                            ? '時刻: ${tempTimeBefore.format(context)}'
+                            : 'Time: ${tempTimeBefore.format(context)}',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       trailing: const Icon(Icons.access_time),
@@ -404,10 +443,10 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   if (tempDayOf)
                     ListTile(
                       title: Text(
-                        widget.lang == UiLang.ja 
-                          ? '時刻: ${tempTimeOf.format(context)}' 
-                          : 'Time: ${tempTimeOf.format(context)}',
-                         style: const TextStyle(fontWeight: FontWeight.bold),
+                        widget.lang == UiLang.ja
+                            ? '時刻: ${tempTimeOf.format(context)}'
+                            : 'Time: ${tempTimeOf.format(context)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       trailing: const Icon(Icons.access_time),
                       onTap: () => pickTime(false),
@@ -422,11 +461,17 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   child: Text(widget.lang == UiLang.ja ? 'キャンセル' : 'Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () { // ここから変更
+                  onPressed: () {
+                    // ここから変更
                     if (!tempDayBefore && !tempDayOf) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(widget.lang == UiLang.ja 
-                          ? 'どちらか1つは選択してください' : 'Please select at least one')),
+                        SnackBar(
+                          content: Text(
+                            widget.lang == UiLang.ja
+                                ? 'どちらか1つは選択してください'
+                                : 'Please select at least one',
+                          ),
+                        ),
                       );
                       return;
                     }
@@ -438,16 +483,18 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                       _timeDayBefore = tempTimeBefore;
                       _timeDayOf = tempTimeOf;
                     });
-                    
+
                     // 2. ★ここがポイント！先にダイアログを閉じて、ユーザーを解放する
                     Navigator.pop(context);
 
                     // 3. ユーザーには「保存を開始しました」と軽く伝える（任意）
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(widget.lang == UiLang.ja 
-                          ? '設定を反映中...' 
-                          : 'Saving settings...'),
+                        content: Text(
+                          widget.lang == UiLang.ja
+                              ? '設定を反映中...'
+                              : 'Saving settings...',
+                        ),
                         duration: const Duration(seconds: 1), // 短めに表示
                       ),
                     );
@@ -456,7 +503,6 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                     // 処理が終わったら、_performNotificationScheduling 内で
                     // 「〇〇件予約しました」というSnackBarが後から追っかけて表示されます。
                     _performNotificationScheduling();
-                    
                   },
                   child: Text(widget.lang == UiLang.ja ? '完了' : 'Done'),
                 ),
@@ -472,9 +518,11 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
   Future<void> _performNotificationScheduling() async {
     // 既存の通知をキャンセル
     await NotificationService().cancelAll();
-    
+
     try {
-      final rawData = await DefaultAssetBundle.of(context).loadString('assets/schedules.csv');
+      final rawData = await DefaultAssetBundle.of(
+        context,
+      ).loadString('assets/schedules.csv');
       List<List<dynamic>> rows = const CsvToListConverter().convert(rawData);
 
       if (rows.isEmpty) return; // 失敗したらONにならない
@@ -486,7 +534,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
       final now = DateTime.now();
       int scheduledCount = 0;
-      
+
       DateTime? nearestNotificationTime;
       String nearestTrashName = '';
 
@@ -495,7 +543,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
         final row = rows[i];
         if (row.length <= columnIndex) continue;
 
-        final dateStr = row[1].toString(); 
+        final dateStr = row[1].toString();
         DateTime? trashDate;
         try {
           trashDate = DateTime.parse(dateStr);
@@ -503,7 +551,8 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           continue;
         }
 
-        if (trashDate.isBefore(DateTime(now.year, now.month, now.day))) continue;
+        if (trashDate.isBefore(DateTime(now.year, now.month, now.day)))
+          continue;
 
         final cellValue = row[columnIndex];
         final garbageId = int.tryParse(cellValue.toString());
@@ -515,19 +564,26 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           // 前日通知
           if (_notifyDayBefore) {
             final scheduledDateTime = DateTime(
-              trashDate.year, trashDate.month, trashDate.day - 1,
-              _timeDayBefore.hour, _timeDayBefore.minute,
+              trashDate.year,
+              trashDate.month,
+              trashDate.day - 1,
+              _timeDayBefore.hour,
+              _timeDayBefore.minute,
             );
             if (scheduledDateTime.isAfter(now)) {
               final weekday = _getWeekdayString(trashDate.weekday);
               final message = widget.lang == UiLang.ja
                   ? "明日（$weekday）のゴミは$trashNameです。"
                   : "Tomorrow($weekday) is $trashName day.";
-              
-              await NotificationService().scheduleNotification(scheduledDateTime, message);
+
+              await NotificationService().scheduleNotification(
+                scheduledDateTime,
+                message,
+              );
               scheduledCount++;
 
-              if (nearestNotificationTime == null || scheduledDateTime.isBefore(nearestNotificationTime)) {
+              if (nearestNotificationTime == null ||
+                  scheduledDateTime.isBefore(nearestNotificationTime)) {
                 nearestNotificationTime = scheduledDateTime;
                 nearestTrashName = trashName;
               }
@@ -537,8 +593,11 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           // 当日通知
           if (_notifyDayOf) {
             final scheduledDateTime = DateTime(
-              trashDate.year, trashDate.month, trashDate.day,
-              _timeDayOf.hour, _timeDayOf.minute,
+              trashDate.year,
+              trashDate.month,
+              trashDate.day,
+              _timeDayOf.hour,
+              _timeDayOf.minute,
             );
             if (scheduledDateTime.isAfter(now)) {
               final weekday = _getWeekdayString(trashDate.weekday);
@@ -546,10 +605,14 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   ? "今日（$weekday）のゴミは$trashNameです。"
                   : "Today($weekday) is $trashName day.";
 
-              await NotificationService().scheduleNotification(scheduledDateTime, message);
+              await NotificationService().scheduleNotification(
+                scheduledDateTime,
+                message,
+              );
               scheduledCount++;
 
-              if (nearestNotificationTime == null || scheduledDateTime.isBefore(nearestNotificationTime)) {
+              if (nearestNotificationTime == null ||
+                  scheduledDateTime.isBefore(nearestNotificationTime)) {
                 nearestNotificationTime = scheduledDateTime;
                 nearestTrashName = trashName;
               }
@@ -561,19 +624,25 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
       // 次回予定テキスト作成
       String nextText = '';
-      
+
       if (nearestNotificationTime != null) {
         // 1. 日付と時間の文字列作成
-        final dateStr = "${nearestNotificationTime.month}/${nearestNotificationTime.day}";
-        final timeStr = "${nearestNotificationTime.hour}:${nearestNotificationTime.minute.toString().padLeft(2, '0')}";
-        
+        final dateStr =
+            "${nearestNotificationTime.month}/${nearestNotificationTime.day}";
+        final timeStr =
+            "${nearestNotificationTime.hour}:${nearestNotificationTime.minute.toString().padLeft(2, '0')}";
+
         // 2. 「今日」「明日」の判定ロジック
         String dayLabel = dateStr;
         // final now = DateTime.now(); // 既に定義済み
         final tomorrow = DateTime(now.year, now.month, now.day + 1);
         final today = DateTime(now.year, now.month, now.day);
-        
-        final checkDate = DateTime(nearestNotificationTime.year, nearestNotificationTime.month, nearestNotificationTime.day);
+
+        final checkDate = DateTime(
+          nearestNotificationTime.year,
+          nearestNotificationTime.month,
+          nearestNotificationTime.day,
+        );
 
         if (checkDate.isAtSameMomentAs(tomorrow)) {
           dayLabel = widget.lang == UiLang.ja ? "明日" : "Tomorrow";
@@ -599,19 +668,18 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
         }
 
         // 5. テキストの組み立て
-        nextText = widget.lang == UiLang.ja 
+        nextText = widget.lang == UiLang.ja
             ? "次回: $displayTrashName ($dayLabel $timeStr)"
             : "Next: $displayTrashName ($dayLabel $timeStr)";
-            
       } else {
         // 通知がない場合
-        nextText = widget.lang == UiLang.ja 
-            ? "予定されている通知はありません" 
+        nextText = widget.lang == UiLang.ja
+            ? "予定されている通知はありません"
             : "No upcoming notifications";
       }
 
       // ★★★ 修正ポイント ★★★
-      
+
       // 1. 変数を更新（まだ画面更新はしない）
       _isNotificationOn = true; // ★ここで初めてONにする
       _nextScheduleText = nextText;
@@ -627,13 +695,14 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.lang == UiLang.ja 
-              ? '設定完了: $_targetArea ($scheduledCount件予約)' 
-              : 'Setup Complete: $_targetArea ($scheduledCount scheduled)'),
+            content: Text(
+              widget.lang == UiLang.ja
+                  ? '設定完了: $_targetArea ($scheduledCount件予約)'
+                  : 'Setup Complete: $_targetArea ($scheduledCount scheduled)',
+            ),
           ),
         );
       }
-
     } catch (e) {
       debugPrint('Schedule Error: $e');
       // エラー時はONにしない（_isNotificationOnはfalseのまま）
@@ -642,53 +711,100 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
   String _getTrashNameFromId(int id) {
     switch (id) {
-      case 1: return widget.lang == UiLang.ja ? '燃やせるごみ' : 'Burnable'; // 短くしました
-      case 2: return widget.lang == UiLang.ja ? '燃やせないごみ' : 'Non-burnable';
-      case 8: return widget.lang == UiLang.ja ? 'びん・缶・ペット' : 'Bottles/Cans';
-      case 9: return widget.lang == UiLang.ja ? 'プラスチック' : 'Plastic';
-      case 10: return widget.lang == UiLang.ja ? '雑がみ' : 'Paper';
-      case 11: return widget.lang == UiLang.ja ? '枝・葉' : 'Leaves';
-      default: return '';
+      case 1:
+        return widget.lang == UiLang.ja ? '燃やせるごみ' : 'Burnable'; // 短くしました
+      case 2:
+        return widget.lang == UiLang.ja ? '燃やせないごみ' : 'Non-burnable';
+      case 8:
+        return widget.lang == UiLang.ja ? 'びん・缶・ペット' : 'Bottles/Cans';
+      case 9:
+        return widget.lang == UiLang.ja ? 'プラスチック' : 'Plastic';
+      case 10:
+        return widget.lang == UiLang.ja ? '雑がみ' : 'Paper';
+      case 11:
+        return widget.lang == UiLang.ja ? '枝・葉' : 'Leaves';
+      default:
+        return '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isJa = widget.lang == UiLang.ja;
+
     return Drawer(
       child: Column(
         children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(color: Colors.green),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isJa ? 'メニュー' : 'Menu',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    LanguageSelector(
+                      currentLang: widget.lang,
+                      onChanged: widget.onLangChanged,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Area: ${widget.selectedArea}',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                DrawerHeader(
-                  decoration: const BoxDecoration(
-                    color: Color.fromARGB(255, 123, 226, 132),
-                  ),
-                  child: Text(
-                    widget.lang == UiLang.ja ? 'メニュー' : 'Menu',
-                    style: const TextStyle(color: Colors.white, fontSize: 24),
+                // ★ ここで言語設定 (widget.lang) を次の画面に渡しています
+                ListTile(
+                  leading: const Icon(Icons.calendar_month),
+                  title: Text(isJa ? 'ホーム' : 'Home'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/',
+                    arguments: widget.lang,
                   ),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.calendar_today),
-                  title: Text(widget.lang == UiLang.ja ? 'ホーム(カレンダー)' : 'Home'),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.search),
-                  title: Text(widget.lang == UiLang.ja ? 'ゴミ分別辞書' : 'Dictionary'),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/dictionary'),
+                  leading: const Icon(Icons.book),
+                  title: Text(isJa ? '分別辞書' : 'Dictionary'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/search',
+                    arguments: widget.lang,
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.map_outlined),
-                  title: Text(widget.lang == UiLang.ja ? 'ゴミ箱マップ' : 'Map'),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/map'),
+                  title: Text(isJa ? 'ゴミ箱マップ' : 'Trash Bin Map'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/map',
+                    arguments: widget.lang,
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.camera_alt),
-                  title: Text(widget.lang == UiLang.ja ? 'AIカメラ判定' : 'AI Camera'),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/camera'),
+                  title: Text(isJa ? 'AI判定' : 'AI Scan'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/camera',
+                    arguments: widget.lang,
+                  ),
                 ),
               ],
             ),
@@ -697,12 +813,16 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
           // --- 通知設定エリア ---
           Container(
-            color: _isNotificationOn ? const Color(0xFFF0F7F0) : null, // ONのとき少し色を変える
+            color: _isNotificationOn
+                ? const Color(0xFFF0F7F0)
+                : null, // ONのとき少し色を変える
             child: Column(
               children: [
                 SwitchListTile(
                   secondary: Icon(
-                    _isNotificationOn ? Icons.notifications_active : Icons.notifications_off,
+                    _isNotificationOn
+                        ? Icons.notifications_active
+                        : Icons.notifications_off,
                     color: _isNotificationOn ? Colors.orange : Colors.grey,
                   ),
                   title: Text(
@@ -711,22 +831,40 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   ),
                   // 【UX改善】サブタイトルに次回の予定を表示
                   subtitle: _isNotificationOn
-                      ? Text(_nextScheduleText, style: const TextStyle(color: Colors.blueGrey, fontSize: 12))
-                      : Text(widget.lang == UiLang.ja ? '設定して通知をONにする' : 'Tap to setup'),
+                      ? Text(
+                          _nextScheduleText,
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontSize: 12,
+                          ),
+                        )
+                      : Text(
+                          widget.lang == UiLang.ja
+                              ? '設定して通知をONにする'
+                              : 'Tap to setup',
+                        ),
                   value: _isNotificationOn,
                   onChanged: _handleSwitchChange,
                 ),
-                
+
                 // 【UX改善】ONの時だけ表示される「設定変更」ボタン
                 if (_isNotificationOn)
                   ListTile(
                     dense: true,
-                    leading: const Icon(Icons.settings, size: 20, color: Colors.grey),
+                    leading: const Icon(
+                      Icons.settings,
+                      size: 20,
+                      color: Colors.grey,
+                    ),
                     title: Text(
                       widget.lang == UiLang.ja ? '地域や時間を変更' : 'Edit Settings',
                       style: const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                     onTap: () {
                       // 編集モードとしてダイアログを開く
                       _showAreaSelectionDialog();
