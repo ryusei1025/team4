@@ -617,7 +617,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      drawer: LeftMenuDrawer(lang: _lang, selectedArea: _selectedArea),
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: _selectedArea,
+        onLangChanged: (UiLang newLang) {
+          _loadTranslations(newLang);
+        },
+      ),
 
       // --- AppBar ---
       appBar: AppBar(
