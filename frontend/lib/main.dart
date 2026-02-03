@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
 import 'notification_service.dart';
 import 'calendar_page.dart';
 import 'bunbetujisho.dart';
@@ -9,12 +10,12 @@ void main() async {
   // Flutterの初期化待ち
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 通知サービスの初期化（元のコードを保持）
-  try {
-    await NotificationService.init();
-  } catch (e) {
-    debugPrint('通知初期化エラー: $e');
-  }
+  // タイムゾーンデータのロード
+  tz.initializeTimeZones();
+  
+  // 通知サービスの初期化
+  final notificationService = NotificationService();
+  await notificationService.init();
 
   runApp(const MyApp());
 }
@@ -49,7 +50,7 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const CalendarScreen(),
-        '/search': (context) => const SearchScreen(),
+        '/dictionary': (context) => const SearchScreen(),
         '/camera': (context) => const CameraScreen(),
         '/map': (context) => const TrashBinMapScreen(), // ★マップ画面のルートを追加
       },

@@ -1,151 +1,114 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'dart:typed_data'; // バイブレーション設定用
 
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // 初期化
-  static Future<void> init() async {
+  bool _isInitialized = false;
+
+  // 初期化処理
+  Future<void> init() async {
+    if (_isInitialized) return;
+
+    tz.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const DarwinInitializationSettings initializationSettingsIOS =
+    final DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings(
-          requestAlertPermission: true,
-          requestBadgePermission: true,
-          requestSoundPermission: true,
-        );
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
 
-    const InitializationSettings initializationSettings =
-        InitializationSettings(
-          android: initializationSettingsAndroid,
-          iOS: initializationSettingsIOS,
-        );
+    final InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+    );
 
-    await _notificationsPlugin.initialize(initializationSettings);
-
-    // ★重要：タイムゾーン（日本時間など）を使えるように初期化
-    tz.initializeTimeZones();
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    _isInitialized = true;
   }
 
-  // ★追加機能：指定した曜日・時間に通知を予約する関数
-  static Future<void> scheduleWeeklyNotification({
-    required int id,
-    required String title,
-    required String body,
-    required int weekday, // 1=月曜, 7=日曜
-    required int hour,    // 何時 (0-23)
-    required int minute,  // 何分 (0-59)
-  }) async {
-    await _notificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      _nextInstanceOfDayTime(weekday, hour, minute), // 次の通知日時を計算
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'garbage_notification_channel',
-          'ゴミ出し通知',
-          importance: Importance.max,
-          priority: Priority.high,
+  // 権限リクエスト
+  Future<void> requestPermissions() async {
+    if (Platform.isIOS) {
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+    } else if (Platform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      await androidImplementation?.requestNotificationsPermission();
+      await androidImplementation?.requestExactAlarmsPermission(); 
+    }
+  }
+
+  // ★スケジュール予約メソッド（修正：IDを日時から生成して重複を防ぐ）
+  Future<void> scheduleNotification(DateTime scheduledTime, String body) async {
+    // タイムゾーン対応の時間に変換
+    final tz.TZDateTime tzScheduledTime =
+        tz.TZDateTime.from(scheduledTime, tz.local);
+
+    // ★重要：IDを日時に基づいて生成（これで複数の予約が可能になります）
+    // IDが同じだと前の予約が上書きされてしまうため
+    final int notificationId = scheduledTime.millisecondsSinceEpoch ~/ 1000;
+
+    try {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        notificationId, // ここを固定の0から変更しました
+        'ゴミ出し通知', // タイトル
+        body, // 本文
+        tzScheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'garbage_notification_v3', 
+            'ゴミ分別通知',
+            channelDescription: 'ゴミ出しの時間を通知します',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+            vibrationPattern: Int64List.fromList([0, 1000, 500, 1000]),
+            visibility: NotificationVisibility.public,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
         ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, // ★毎週繰り返す設定
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
-  }
-
-  // 次の「〇曜日の〇時〇分」がいつかを計算する計算機
-  static tz.TZDateTime _nextInstanceOfDayTime(int weekday, int hour, int minute) {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    
-    // 今日の日付で、指定された時間を作る
-    tz.TZDateTime scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
-    );
-
-    // もし指定した曜日まで日を進める
-    while (scheduledDate.weekday != weekday) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      debugPrint("予約成功(ID:$notificationId): $tzScheduledTime $body");
+    } catch (e) {
+      debugPrint("予約エラー: $e");
     }
-
-    // もしその時間がもう過ぎていたら、来週にする
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 7));
-    }
-
-    return scheduledDate;
   }
 
-  // ★追加機能：通知を全部キャンセル（オフにする時用）
-  static Future<void> cancelAll() async {
-    await _notificationsPlugin.cancelAll();
-  }
-
-  // ★追加機能：日付を指定して通知を予約する関数
-  static Future<void> scheduleDateNotification({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime date, // 通知したい日付
-    required int hour,    // 何時 (0-23)
-    required int minute,  // 何分 (0-59)
-  }) async {
-    // 日本時間で日時を作成
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    
-    final tz.TZDateTime scheduledDate = tz.TZDateTime(
-      tz.local,
-      date.year,
-      date.month,
-      date.day,
-      hour,
-      minute,
-    );
-
-    // もし過去の時間なら予約しない（エラー防止）
-    if (scheduledDate.isBefore(now)) return;
-
-    await _notificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      scheduledDate,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'garbage_notification_channel',
-          'ゴミ出し通知',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
-  }
-
-  // ★デバッグ用：現在予約されている通知の数とIDをコンソールに出す
-  static Future<void> checkPendingNotifications() async {
-    final List<PendingNotificationRequest> pendingNotificationRequests =
-        await _notificationsPlugin.pendingNotificationRequests();
-    
-    print('--- 予約済み通知リスト (${pendingNotificationRequests.length}件) ---');
-    for (var notification in pendingNotificationRequests) {
-      print('ID: ${notification.id}, Title: ${notification.title}, Body: ${notification.body}');
-    }
-    print('-------------------------------------------------------');
+  // 予約全キャンセル
+  Future<void> cancelAll() async {
+    await flutterLocalNotificationsPlugin.cancelAll();
+    debugPrint("全ての通知予約をキャンセルしました");
   }
 }
-

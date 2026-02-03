@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'notification_service.dart'; // 上記で作成したファイルをインポート
-import 'constants.dart'; // ★API通信に必要
-import 'package:http/http.dart' as http; // ★API通信に必要
-import 'dart:convert'; // ★JSON解析に必要
+import 'package:csv/csv.dart';
+import 'notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-enum UiLang { ja, en }
+enum UiLang { ja, en, zh, ko, ru, vi, id }
 
-/// 全画面共通：言語選択ボタン
+// --- 言語選択ウィジェット (修正版) ---
 class LanguageSelector extends StatelessWidget {
   final UiLang currentLang;
   final ValueChanged<UiLang> onChanged;
@@ -18,52 +17,52 @@ class LanguageSelector extends StatelessWidget {
     required this.onChanged,
   });
 
+  // 言語ラベルを表示するヘルパー関数
+  String _getLangLabel(UiLang lang) {
+    switch (lang) {
+      case UiLang.ja: return '日本語';
+      case UiLang.en: return 'English';
+      case UiLang.zh: return '中文';
+      case UiLang.ko: return '한국어';
+      case UiLang.ru: return 'Русский';
+      case UiLang.vi: return 'Tiếng Việt';
+      case UiLang.id: return 'Bahasa Indonesia';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.only(right: 8), // 余白を調整
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          height: 36, // 高さを指定して他のボタンとサイズ感を合わせる
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: const Color(0xFFE7EBF3),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300), // 薄い枠線を追加してボタンらしくする
+            color: Colors.white, // 背景を白にしてすっきりさせる
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                currentLang == UiLang.ja ? '言語: ' : 'Lang: ',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<UiLang>(
-                  value: currentLang,
-                  isDense: true,
-                  icon: const Icon(
-                    Icons.expand_more,
-                    size: 18,
-                    color: Colors.black,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<UiLang>(
+              value: currentLang,
+              // アイコン（地球儀）を削除し、デフォルトの矢印だけにする
+              // もし矢印も消したい場合は iconSize: 0 にしてください
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+              isDense: true, // ぎゅっと詰めて表示
+              onChanged: (UiLang? newValue) {
+                if (newValue != null) onChanged(newValue);
+              },
+              items: UiLang.values.map((UiLang lang) {
+                return DropdownMenuItem<UiLang>(
+                  value: lang,
+                  child: Text(
+                    _getLangLabel(lang),
+                    style: const TextStyle(fontSize: 13, color: Colors.black87),
                   ),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: UiLang.ja, child: Text('日本語')),
-                    DropdownMenuItem(value: UiLang.en, child: Text('English')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) onChanged(v);
-                  },
-                ),
-              ),
-            ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ),
@@ -71,7 +70,10 @@ class LanguageSelector extends StatelessWidget {
   }
 }
 
-/// 全画面共通：サイドメニュー（通知スイッチ付き）
+// --- メインメニュー (変更なし) ---
+// ※以下は元のコードのままです。変更が必要ないので省略して記述します。
+// LeftMenuDrawer クラス以降はそのまま使ってください。
+
 class LeftMenuDrawer extends StatefulWidget {
   final UiLang lang;
   final String selectedArea;
@@ -87,112 +89,566 @@ class LeftMenuDrawer extends StatefulWidget {
 }
 
 class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
-  bool _isNotificationOn = true;
+  // 曜日を言語設定に合わせて変換するメソッド
+  String _getWeekdayString(int weekday) {
+    if (widget.lang == UiLang.ja) {
+      const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+      return weekdays[weekday - 1];
+    } else {
+      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[weekday - 1];
+    }
+  }
+
+  // 設定状態管理用の変数
+  bool _isNotificationOn = false;
+  String _targetWard = '中央区';
+  String _targetArea = '中央区1';
+
+  // 次回の通知予定を表示するためのテキスト
+  String _nextScheduleText = '';
+
+  // 時刻設定用の変数
+  bool _notifyDayBefore = true; // 前日
+  bool _notifyDayOf = true;     // 当日
+  TimeOfDay _timeDayBefore = const TimeOfDay(hour: 21, minute: 0);
+  TimeOfDay _timeDayOf = const TimeOfDay(hour: 8, minute: 0);
+
+  // 地域データ
+  final Map<String, List<String>> _areaData = {
+    '中央区': ['中央区1', '中央区2', '中央区3', '中央区4', '中央区5', '中央区6'],
+    '豊平区': ['豊平区1', '豊平区2', '豊平区3', '豊平区4'],
+    '清田区': ['清田区1', '清田区2'],
+    '北区': ['北区1', '北区2', '北区3', '北区4', '北区5', '北区6'],
+    '東区': ['東区1', '東区2', '東区3', '東区4', '東区5', '東区6'],
+    '白石区': ['白石区1', '白石区2', '白石区3', '白石区4'],
+    '厚別区': ['厚別区1', '厚別区2', '厚別区3', '厚別区4'],
+    '南区': ['南区1', '南区2', '南区3', '南区4', '南区5', '南区6', '南区7'],
+    '西区': ['西区1', '西区2', '西区3', '西区4'],
+    '手稲区': ['手稲区1', '手稲区2', '手稲区3'],
+  };
 
   @override
   void initState() {
     super.initState();
-    _loadNotificationSettings();
+    _loadSettings();
+    
+    // 通知権限の初期化
+    final service = NotificationService();
+    service.init();
   }
 
-  // 保存されている設定を読み込む
-  Future<void> _loadNotificationSettings() async {
+  // 設定の読み込み
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isNotificationOn = prefs.getBool('isNotificationOn') ?? false;
-    });
-  }
-
-// 実際のスケジュールを取得して通知セット
-  Future<void> _toggleNotification(bool value) async {
-    setState(() {
-      _isNotificationOn = value;
-    });
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('notification_on', value);
-
-    if (value) {
-      // ONにした場合：サーバーからデータを取って通知登録
-      // ※注意：本来は「中央区1」のような正確なIDが必要ですが、
-      // ここでは仮に widget.selectedArea に「中央区1」が入っている、
-      // または固定値としてテスト用に「中央区1」を使います。
+      _isNotificationOn = prefs.getBool('noti_is_on') ?? false;
+      _targetWard = prefs.getString('noti_ward') ?? _areaData.keys.first;
+      _targetArea = prefs.getString('noti_area') ?? _areaData[_targetWard]!.first;
+      _notifyDayBefore = prefs.getBool('noti_day_before') ?? true;
+      _notifyDayOf = prefs.getBool('noti_day_of') ?? true;
       
-      // 今の時期を取得
-      final now = DateTime.now();
-      
-      // エラーが出ないように try-catch で囲む
-      try {
-        await NotificationService.cancelAll(); // 一旦古い予約をクリア
-
-        // 今月と来月のデータを取得して通知をセットする関数を呼ぶ
-        await _fetchAndSchedule(now.year, now.month, '中央区1');
-        
-        // 来月分も予備で取っておくと親切
-        final nextMonth = DateTime(now.year, now.month + 1, 1);
-        await _fetchAndSchedule(nextMonth.year, nextMonth.month, '中央区1');
-
-        await NotificationService.checkPendingNotifications();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ゴミ出しスケジュールの通知を予約しました')),
-        );
-
-      } catch (e) {
-        debugPrint('通知予約エラー: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('通知予約に失敗しました: $e')),
-        );
+      final tb = prefs.getString('noti_time_before');
+      if (tb != null) {
+        final p = tb.split(':');
+        _timeDayBefore = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
       }
+      final to = prefs.getString('noti_time_of');
+      if (to != null) {
+        final p = to.split(':');
+        _timeDayOf = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+      }
+      // 保存された「次回の予定」があれば読み込む
+      _nextScheduleText = prefs.getString('noti_next_text') ?? '';
+    });
+  }
 
+  // 設定の保存
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('noti_is_on', _isNotificationOn);
+    await prefs.setString('noti_ward', _targetWard);
+    await prefs.setString('noti_area', _targetArea);
+    await prefs.setBool('noti_day_before', _notifyDayBefore);
+    await prefs.setBool('noti_day_of', _notifyDayOf);
+    await prefs.setString('noti_time_before', '${_timeDayBefore.hour}:${_timeDayBefore.minute}');
+    await prefs.setString('noti_time_of', '${_timeDayOf.hour}:${_timeDayOf.minute}');
+    // 次回の予定テキストも保存
+    await prefs.setString('noti_next_text', _nextScheduleText);
+  }
+
+  // スイッチ切り替え時の処理フロー
+  void _handleSwitchChange(bool value) async {
+    if (value) {
+      // ONにする場合：まず権限チェック
+      bool hasPermission = await _checkPermission();
+      if (!hasPermission) return; // 権限がない、または拒否された場合はここで中断
+
+      // 権限OKなら設定ダイアログへ
+      _showAreaSelectionDialog();
     } else {
-      // OFFにした場合：予約を全消し
-      await NotificationService.cancelAll();
+      // OFFにする場合
+      _turnOffNotifications();
     }
   }
 
-  // サーバーから指定月のスケジュールを取得し、通知を登録するヘルパー関数
-  Future<void> _fetchAndSchedule(int year, int month, String areaId) async {
-    // APIのエンドポイント（calendar_pageで使っているものと同じ想定）
-    final url = Uri.parse('${AppConstants.baseUrl}/api/schedules?year=$year&month=$month&area=$areaId');
+  // 【UX改善】権限チェックと誘導
+  Future<bool> _checkPermission() async {
+    // permission_handlerを使用
+    var status = await Permission.notification.status;
     
-    final response = await http.get(url);
-    if (response.statusCode != 200) return; // エラーなら何もしない
+    if (status.isDenied) {
+      // まだ聞いていない、あるいは一度拒否された場合
+      status = await Permission.notification.request();
+    }
 
-    final List<dynamic> data = jsonDecode(response.body);
+    if (status.isPermanentlyDenied) {
+      // 「二度と表示しない」で拒否されている場合、設定画面へ誘導
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(widget.lang == UiLang.ja ? '通知が無効です' : 'Notifications Disabled'),
+            content: Text(widget.lang == UiLang.ja 
+              ? '通知を受け取るには、設定画面で通知を許可してください。' 
+              : 'Please enable notifications in settings to receive alerts.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(widget.lang == UiLang.ja ? 'キャンセル' : 'Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  openAppSettings(); // 設定画面を開く
+                },
+                child: Text(widget.lang == UiLang.ja ? '設定を開く' : 'Open Settings'),
+              ),
+            ],
+          ),
+        );
+      }
+      return false;
+    }
 
-    int notificationId = year * 10000 + month * 100; // IDが被らないように工夫
+    return status.isGranted;
+  }
 
-    for (var item in data) {
-      // データ例: {"date": "2025-10-01", "trash_type": {"name": "燃やせるゴミ", ...}, ...}
-      if (item['trash_type'] == null) continue; // ゴミがない日はスキップ
+  // 通知OFF処理
+  Future<void> _turnOffNotifications() async {
+    setState(() {
+      _isNotificationOn = false;
+      _nextScheduleText = ''; // 予定テキスト消去
+    });
+    await _saveSettings();
+    await NotificationService().cancelAll();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.lang == UiLang.ja ? '通知をOFFにしました' : 'Notifications OFF')),
+      );
+    }
+  }
 
-      final String dateStr = item['date']; // "2025-10-01"
-      final DateTime trashDate = DateTime.parse(dateStr);
-      final String trashName = item['trash_type']['name'];
+  // Step 1: 地域選択ダイアログ
+  void _showAreaSelectionDialog() {
+    String tempWard = _targetWard;
+    String tempArea = _targetArea;
 
-      // --- ① 前日の夜21時に通知 ---
-      // ゴミの日の前日
-      final DateTime prevDay = trashDate.subtract(const Duration(days: 1));
+    // 通知がまだOFFの場合のみ、現在地を初期値として提案（既存設定の上書き防止）
+    if (!_isNotificationOn) {
+      for (final ward in _areaData.keys) {
+        if (widget.selectedArea.startsWith(ward)) {
+          tempWard = ward;
+          if (_areaData[ward]!.contains(widget.selectedArea)) {
+            tempArea = widget.selectedArea;
+          } else {
+            tempArea = _areaData[ward]!.first;
+          }
+          break;
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(widget.lang == UiLang.ja ? '地域の設定' : 'Select Area'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(widget.lang == UiLang.ja 
+                    ? 'ゴミ出しカレンダーの地域を選択してください' 
+                    : 'Select your garbage collection area'),
+                  const SizedBox(height: 20),
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: tempWard,
+                    items: _areaData.keys.map((ward) {
+                      return DropdownMenuItem(value: ward, child: Text(ward));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() {
+                          tempWard = val;
+                          tempArea = _areaData[val]!.first;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: tempArea,
+                    items: _areaData[tempWard]!.map((area) {
+                      return DropdownMenuItem(value: area, child: Text(area));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setStateDialog(() => tempArea = val);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); 
+                  },
+                  child: Text(widget.lang == UiLang.ja ? 'キャンセル' : 'Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    _targetWard = tempWard;
+                    _targetArea = tempArea;
+                    Navigator.pop(context);
+                    _showTimeSettingDialog(); // 次へ
+                  },
+                  child: Text(widget.lang == UiLang.ja ? '次へ' : 'Next'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Step 2: 時刻設定ダイアログ
+  void _showTimeSettingDialog() {
+    bool tempDayBefore = _notifyDayBefore;
+    bool tempDayOf = _notifyDayOf;
+    TimeOfDay tempTimeBefore = _timeDayBefore;
+    TimeOfDay tempTimeOf = _timeDayOf;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            Future<void> pickTime(bool isBefore) async {
+              final initial = isBefore ? tempTimeBefore : tempTimeOf;
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: initial,
+              );
+              if (picked != null) {
+                setStateDialog(() {
+                  if (isBefore) tempTimeBefore = picked;
+                  else tempTimeOf = picked;
+                });
+              }
+            }
+
+            return AlertDialog(
+              title: Text(widget.lang == UiLang.ja ? '通知時刻の設定' : 'Time Settings'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(widget.lang == UiLang.ja 
+                      ? '通知を受け取るタイミングを選択してください' 
+                      : 'Select when to be notified'),
+                  const SizedBox(height: 10),
+                  
+                  CheckboxListTile(
+                    title: Text(widget.lang == UiLang.ja ? '前日' : 'Day Before'),
+                    value: tempDayBefore,
+                    onChanged: (val) {
+                      setStateDialog(() => tempDayBefore = val ?? false);
+                    },
+                  ),
+                  if (tempDayBefore)
+                    ListTile(
+                      title: Text(
+                        widget.lang == UiLang.ja 
+                          ? '時刻: ${tempTimeBefore.format(context)}' 
+                          : 'Time: ${tempTimeBefore.format(context)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () => pickTime(true),
+                    ),
+
+                  const Divider(),
+
+                  CheckboxListTile(
+                    title: Text(widget.lang == UiLang.ja ? '当日' : 'Morning Of'),
+                    value: tempDayOf,
+                    onChanged: (val) {
+                      setStateDialog(() => tempDayOf = val ?? false);
+                    },
+                  ),
+                  if (tempDayOf)
+                    ListTile(
+                      title: Text(
+                        widget.lang == UiLang.ja 
+                          ? '時刻: ${tempTimeOf.format(context)}' 
+                          : 'Time: ${tempTimeOf.format(context)}',
+                         style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () => pickTime(false),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: Text(widget.lang == UiLang.ja ? 'キャンセル' : 'Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () { // ここから変更
+                    if (!tempDayBefore && !tempDayOf) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(widget.lang == UiLang.ja 
+                          ? 'どちらか1つは選択してください' : 'Please select at least one')),
+                      );
+                      return;
+                    }
+
+                    // 1. まずUIの状態（スイッチONなど）を即座に更新する
+                    setState(() {
+                      _notifyDayBefore = tempDayBefore;
+                      _notifyDayOf = tempDayOf;
+                      _timeDayBefore = tempTimeBefore;
+                      _timeDayOf = tempTimeOf;
+                    });
+                    
+                    // 2. ★ここがポイント！先にダイアログを閉じて、ユーザーを解放する
+                    Navigator.pop(context);
+
+                    // 3. ユーザーには「保存を開始しました」と軽く伝える（任意）
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(widget.lang == UiLang.ja 
+                          ? '設定を反映中...' 
+                          : 'Saving settings...'),
+                        duration: const Duration(seconds: 1), // 短めに表示
+                      ),
+                    );
+
+                    // 4. 重い処理は裏側で勝手にやらせる（awaitを外す）
+                    // 処理が終わったら、_performNotificationScheduling 内で
+                    // 「〇〇件予約しました」というSnackBarが後から追っかけて表示されます。
+                    _performNotificationScheduling();
+                    
+                  },
+                  child: Text(widget.lang == UiLang.ja ? '完了' : 'Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 予約処理＆次回予定の計算
+  Future<void> _performNotificationScheduling() async {
+    // 既存の通知をキャンセル
+    await NotificationService().cancelAll();
+    
+    try {
+      final rawData = await DefaultAssetBundle.of(context).loadString('assets/schedules.csv');
+      List<List<dynamic>> rows = const CsvToListConverter().convert(rawData);
+
+      if (rows.isEmpty) return; // 失敗したらONにならない
+
+      final header = rows[0].map((e) => e.toString()).toList();
+      final columnIndex = header.indexOf(_targetArea);
+
+      if (columnIndex == -1) return; // 地域が見つからなければONにならない
+
+      final now = DateTime.now();
+      int scheduledCount = 0;
       
-      await NotificationService.scheduleDateNotification(
-        id: notificationId++, 
-        title: '明日のゴミ出し',
-        body: '明日は「$trashName」の日です。準備をしましょう。',
-        date: prevDay, 
-        hour: 21, 
-        minute: 0,
-      );
+      DateTime? nearestNotificationTime;
+      String nearestTrashName = '';
 
-      // --- ② 当日の朝7時に通知 ---
-      await NotificationService.scheduleDateNotification(
-        id: notificationId++, 
-        title: '今日のゴミ出し',
-        body: '今日は「$trashName」の日です。忘れずに出しましょう！',
-        date: trashDate, 
-        hour: 7, 
-        minute: 0,
-      );
+      // --- ループ処理 (変更なし) ---
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.length <= columnIndex) continue;
+
+        final dateStr = row[1].toString(); 
+        DateTime? trashDate;
+        try {
+          trashDate = DateTime.parse(dateStr);
+        } catch (e) {
+          continue;
+        }
+
+        if (trashDate.isBefore(DateTime(now.year, now.month, now.day))) continue;
+
+        final cellValue = row[columnIndex];
+        final garbageId = int.tryParse(cellValue.toString());
+
+        if (garbageId != null) {
+          String trashName = _getTrashNameFromId(garbageId);
+          if (trashName.isEmpty) continue;
+
+          // 前日通知
+          if (_notifyDayBefore) {
+            final scheduledDateTime = DateTime(
+              trashDate.year, trashDate.month, trashDate.day - 1,
+              _timeDayBefore.hour, _timeDayBefore.minute,
+            );
+            if (scheduledDateTime.isAfter(now)) {
+              final weekday = _getWeekdayString(trashDate.weekday);
+              final message = widget.lang == UiLang.ja
+                  ? "明日（$weekday）のゴミは$trashNameです。"
+                  : "Tomorrow($weekday) is $trashName day.";
+              
+              await NotificationService().scheduleNotification(scheduledDateTime, message);
+              scheduledCount++;
+
+              if (nearestNotificationTime == null || scheduledDateTime.isBefore(nearestNotificationTime)) {
+                nearestNotificationTime = scheduledDateTime;
+                nearestTrashName = trashName;
+              }
+            }
+          }
+
+          // 当日通知
+          if (_notifyDayOf) {
+            final scheduledDateTime = DateTime(
+              trashDate.year, trashDate.month, trashDate.day,
+              _timeDayOf.hour, _timeDayOf.minute,
+            );
+            if (scheduledDateTime.isAfter(now)) {
+              final weekday = _getWeekdayString(trashDate.weekday);
+              final message = widget.lang == UiLang.ja
+                  ? "今日（$weekday）のゴミは$trashNameです。"
+                  : "Today($weekday) is $trashName day.";
+
+              await NotificationService().scheduleNotification(scheduledDateTime, message);
+              scheduledCount++;
+
+              if (nearestNotificationTime == null || scheduledDateTime.isBefore(nearestNotificationTime)) {
+                nearestNotificationTime = scheduledDateTime;
+                nearestTrashName = trashName;
+              }
+            }
+          }
+        }
+      }
+      // --- ループ処理終了 ---
+
+      // 次回予定テキスト作成
+      String nextText = '';
+      
+      if (nearestNotificationTime != null) {
+        // 1. 日付と時間の文字列作成
+        final dateStr = "${nearestNotificationTime.month}/${nearestNotificationTime.day}";
+        final timeStr = "${nearestNotificationTime.hour}:${nearestNotificationTime.minute.toString().padLeft(2, '0')}";
+        
+        // 2. 「今日」「明日」の判定ロジック
+        String dayLabel = dateStr;
+        // final now = DateTime.now(); // 既に定義済み
+        final tomorrow = DateTime(now.year, now.month, now.day + 1);
+        final today = DateTime(now.year, now.month, now.day);
+        
+        final checkDate = DateTime(nearestNotificationTime.year, nearestNotificationTime.month, nearestNotificationTime.day);
+
+        if (checkDate.isAtSameMomentAs(tomorrow)) {
+          dayLabel = widget.lang == UiLang.ja ? "明日" : "Tomorrow";
+        } else if (checkDate.isAtSameMomentAs(today)) {
+          dayLabel = widget.lang == UiLang.ja ? "今日" : "Today";
+        }
+
+        // 3. ゴミの名前を英語に翻訳するマップ
+        final Map<String, String> trashNameEn = {
+          '燃やせるごみ': 'Burnable',
+          '燃やせないごみ': 'Non-burnable',
+          'びん・缶・ペットボトル': 'Bottles/Cans/PET',
+          '容器包装プラスチック': 'Plastic Packaging',
+          '雑がみ': 'Misc. Paper',
+          '枝・葉・草': 'Branches/Leaves',
+          // 必要に応じて他のゴミ種別もここに追加
+        };
+
+        // 4. 言語設定に応じてゴミの名前を切り替え
+        String displayTrashName = nearestTrashName;
+        if (widget.lang != UiLang.ja) {
+          displayTrashName = trashNameEn[nearestTrashName] ?? nearestTrashName;
+        }
+
+        // 5. テキストの組み立て
+        nextText = widget.lang == UiLang.ja 
+            ? "次回: $displayTrashName ($dayLabel $timeStr)"
+            : "Next: $displayTrashName ($dayLabel $timeStr)";
+            
+      } else {
+        // 通知がない場合
+        nextText = widget.lang == UiLang.ja 
+            ? "予定されている通知はありません" 
+            : "No upcoming notifications";
+      }
+
+      // ★★★ 修正ポイント ★★★
+      
+      // 1. 変数を更新（まだ画面更新はしない）
+      _isNotificationOn = true; // ★ここで初めてONにする
+      _nextScheduleText = nextText;
+
+      // 2. 画面の状態に関わらず、確実に保存する
+      await _saveSettings();
+
+      // 3. もし画面が開いていたら、UI上のスイッチもパチンとONに変える
+      if (mounted) {
+        setState(() {
+          // ここは再描画のためだけ
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.lang == UiLang.ja 
+              ? '設定完了: $_targetArea ($scheduledCount件予約)' 
+              : 'Setup Complete: $_targetArea ($scheduledCount scheduled)'),
+          ),
+        );
+      }
+
+    } catch (e) {
+      debugPrint('Schedule Error: $e');
+      // エラー時はONにしない（_isNotificationOnはfalseのまま）
+    }
+  }
+
+  String _getTrashNameFromId(int id) {
+    switch (id) {
+      case 1: return widget.lang == UiLang.ja ? '燃やせるごみ' : 'Burnable'; // 短くしました
+      case 2: return widget.lang == UiLang.ja ? '燃やせないごみ' : 'Non-burnable';
+      case 8: return widget.lang == UiLang.ja ? 'びん・缶・ペット' : 'Bottles/Cans';
+      case 9: return widget.lang == UiLang.ja ? 'プラスチック' : 'Plastic';
+      case 10: return widget.lang == UiLang.ja ? '雑がみ' : 'Paper';
+      case 11: return widget.lang == UiLang.ja ? '枝・葉' : 'Leaves';
+      default: return '';
     }
   }
 
@@ -201,7 +657,6 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     return Drawer(
       child: Column(
         children: [
-          // 上部：ナビゲーション項目
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -217,68 +672,70 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.calendar_today),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'ホーム(カレンダー)' : 'Home(Calendar)',
-                  ),
+                  title: Text(widget.lang == UiLang.ja ? 'ホーム(カレンダー)' : 'Home'),
                   onTap: () => Navigator.pushReplacementNamed(context, '/'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.search),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'ゴミ分別辞書' : 'Dictionary',
-                  ),
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/search'),
+                  title: Text(widget.lang == UiLang.ja ? 'ゴミ分別辞書' : 'Dictionary'),
+                  onTap: () => Navigator.pushReplacementNamed(context, '/dictionary'),
                 ),
-                // 追加：ゴミ箱マップ
                 ListTile(
                   leading: const Icon(Icons.map_outlined),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'ゴミ箱マップ' : 'Trash Bin Map',
-                  ),
+                  title: Text(widget.lang == UiLang.ja ? 'ゴミ箱マップ' : 'Map'),
                   onTap: () => Navigator.pushReplacementNamed(context, '/map'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.camera_alt),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'AIカメラ判定' : 'AI Camera',
-                  ),
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/camera'),
+                  title: Text(widget.lang == UiLang.ja ? 'AIカメラ判定' : 'AI Camera'),
+                  onTap: () => Navigator.pushReplacementNamed(context, '/camera'),
                 ),
               ],
             ),
           ),
-
-          // 下部：通知スイッチエリア
           const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SwitchListTile(
-              secondary: Icon(
-                _isNotificationOn
-                    ? Icons.notifications_active
-                    : Icons.notifications_off,
-                color: _isNotificationOn ? Colors.orange : Colors.grey,
-              ),
-              title: Text(
-                widget.lang == UiLang.ja ? '通知設定' : 'Notifications',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+
+          // --- 通知設定エリア ---
+          Container(
+            color: _isNotificationOn ? const Color(0xFFF0F7F0) : null, // ONのとき少し色を変える
+            child: Column(
+              children: [
+                SwitchListTile(
+                  secondary: Icon(
+                    _isNotificationOn ? Icons.notifications_active : Icons.notifications_off,
+                    color: _isNotificationOn ? Colors.orange : Colors.grey,
+                  ),
+                  title: Text(
+                    widget.lang == UiLang.ja ? '通知設定' : 'Notifications',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  // 【UX改善】サブタイトルに次回の予定を表示
+                  subtitle: _isNotificationOn
+                      ? Text(_nextScheduleText, style: const TextStyle(color: Colors.blueGrey, fontSize: 12))
+                      : Text(widget.lang == UiLang.ja ? '設定して通知をONにする' : 'Tap to setup'),
+                  value: _isNotificationOn,
+                  onChanged: _handleSwitchChange,
                 ),
-              ),
-              subtitle: Text(
-                _isNotificationOn
-                    ? (widget.lang == UiLang.ja ? 'オン' : 'ON')
-                    : (widget.lang == UiLang.ja ? 'オフ' : 'OFF'),
-                style: const TextStyle(fontSize: 12),
-              ),
-              value: _isNotificationOn,
-              onChanged: _toggleNotification,
+                
+                // 【UX改善】ONの時だけ表示される「設定変更」ボタン
+                if (_isNotificationOn)
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.settings, size: 20, color: Colors.grey),
+                    title: Text(
+                      widget.lang == UiLang.ja ? '地域や時間を変更' : 'Edit Settings',
+                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                    onTap: () {
+                      // 編集モードとしてダイアログを開く
+                      _showAreaSelectionDialog();
+                    },
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 10), // 画面最下部の余白
+          const SizedBox(height: 20),
         ],
       ),
     );
