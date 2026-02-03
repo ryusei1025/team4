@@ -1,7 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'trash_bin_api.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'drawer_menu.dart';
+import 'constants.dart';
+
+// ゴミ箱データモデル
+class TrashBin {
+  final int id;
+  final String name;
+  final String address;
+  final double lat;
+  final double lng;
+  final String type;
+
+  TrashBin({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.lat,
+    required this.lng,
+    required this.type,
+  });
+
+  factory TrashBin.fromJson(Map<String, dynamic> json) {
+    return TrashBin(
+      id: json['id'] ?? 0,
+      name: json['name'] ?? '',
+      address: json['address'] ?? '',
+      lat: (json['lat'] ?? 0.0).toDouble(),
+      lng: (json['lng'] ?? 0.0).toDouble(),
+      type: json['type'] ?? 'unknown',
+    );
+  }
+}
 
 class TrashBinMapScreen extends StatefulWidget {
   const TrashBinMapScreen({super.key});
@@ -12,44 +44,68 @@ class TrashBinMapScreen extends StatefulWidget {
 
 class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   GoogleMapController? _mapController;
+
   List<TrashBin> _allBins = [];
-  List<TrashBin> _filteredBins = [];
-  Set<Marker> _markers = {}; // マーカーをセットとして保持
+  Set<Marker> _markers = {};
+
   final TextEditingController _searchController = TextEditingController();
-  static const LatLng _initialPosition = LatLng(43.062, 141.354);
+  static const LatLng _initialPosition = LatLng(43.068661, 141.350755); // 札幌駅周辺
+
+  UiLang _lang = UiLang.ja;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadBins();
+    _fetchBins();
   }
 
-  /// Flask API からゴミ箱一覧取得
-  Future<void> _loadBins() async {
-    try {
-      final bins = await TrashBinApi.fetchBins();
-      setState(() {
-        _allBins = bins;
-        _filteredBins = bins;
-        _updateMarkers(); // 取得後にマーカーを生成
-      });
-    } catch (e) {
-      debugPrint("API Error: $e");
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is UiLang) {
+      if (_lang != args) {
+        setState(() {
+          _lang = args;
+        });
+      }
     }
   }
 
-  /// マーカーセットを更新する
-  void _updateMarkers() {
-    final newMarkers = _filteredBins.map((bin) {
+  Future<void> _fetchBins() async {
+    setState(() => _isLoading = true);
+    try {
+      final url = Uri.parse('${AppConstants.baseUrl}/api/trash_bins');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        final List<TrashBin> loadedBins = data
+            .map((json) => TrashBin.fromJson(json))
+            .toList();
+
+        setState(() {
+          _allBins = loadedBins;
+          _updateMarkers(_allBins);
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('通信エラー: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _updateMarkers(List<TrashBin> bins) {
+    final Set<Marker> newMarkers = bins.map((bin) {
       return Marker(
         markerId: MarkerId(bin.id.toString()),
-        position: LatLng(bin.lat, bin.lon),
+        position: LatLng(bin.lat, bin.lng),
         infoWindow: InfoWindow(title: bin.name, snippet: bin.address),
-        onTap: () {
-          _mapController?.animateCamera(
-            CameraUpdate.newLatLngZoom(LatLng(bin.lat, bin.lon), 17),
-          );
-        },
+        icon: BitmapDescriptor.defaultMarkerWithHue(_getPinColor(bin.type)),
       );
     }).toSet();
 
@@ -58,33 +114,34 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     });
   }
 
-  /// あいまい検索
-  void _search(String keyword) {
-    final normalizedKeyword = keyword.toLowerCase().replaceAll(
-      RegExp(r'\s+'),
-      '',
-    );
-    setState(() {
-      if (normalizedKeyword.isEmpty) {
-        _filteredBins = _allBins;
-      } else {
-        _filteredBins = _allBins.where((bin) {
-          final name = bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-          final address = bin.address.toLowerCase().replaceAll(
-            RegExp(r'\s+'),
-            '',
-          );
-          return name.contains(normalizedKeyword) ||
-              address.contains(normalizedKeyword);
-        }).toList();
-      }
-      _updateMarkers(); // 検索後にマーカーを再生成
-    });
+  double _getPinColor(String type) {
+    if (type.contains('燃やせる') || type == 'burnable')
+      return BitmapDescriptor.hueOrange;
+    if (type.contains('燃やせない') || type == 'non_burnable')
+      return BitmapDescriptor.hueBlue;
+    if (type.contains('資源') || type == 'recyclable')
+      return BitmapDescriptor.hueGreen;
+    if (type.contains('プラスチック') || type == 'plastic')
+      return BitmapDescriptor.hueCyan;
+    return BitmapDescriptor.hueRed;
+  }
 
-    if (_filteredBins.isNotEmpty && _mapController != null) {
+  void _search(String query) {
+    if (query.isEmpty) {
+      _updateMarkers(_allBins);
+      return;
+    }
+
+    final filtered = _allBins.where((bin) {
+      return bin.name.contains(query) || bin.address.contains(query);
+    }).toList();
+
+    _updateMarkers(filtered);
+
+    if (filtered.isNotEmpty && _mapController != null) {
       _mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(
-          LatLng(_filteredBins[0].lat, _filteredBins[0].lon),
+          LatLng(filtered.first.lat, filtered.first.lng),
           15,
         ),
       );
@@ -93,64 +150,94 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isJa = _lang == UiLang.ja;
+
     return Scaffold(
-      // メニュー（drawer_menu.dart）を呼び出し
-      drawer: const LeftMenuDrawer(lang: UiLang.ja, selectedArea: '札幌市'),
       appBar: AppBar(
-        title: const Text(
-          'ゴミ箱マップ',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(isJa ? 'ゴミ箱マップ' : 'Trash Bin Map'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+      // ★ 修正箇所：onLangChanged を追加
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: '中央区',
+        onLangChanged: (newLang) {
+          setState(() {
+            _lang = newLang;
+          });
+        },
+      ),
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: const CameraPosition(
+              target: _initialPosition,
+              zoom: 14,
+            ),
+            markers: _markers,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            onMapCreated: (controller) {
+              _mapController = controller;
+            },
           ),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
+
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 16,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: '住所・ゴミ箱名で検索',
+                  hintText: isJa ? '住所や場所名で検索' : 'Search address or place',
                   prefixIcon: const Icon(Icons.search, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.85),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide.none,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.clear, color: Colors.grey),
+                    onPressed: () {
+                      _searchController.clear();
+                      _search('');
+                      FocusScope.of(context).unfocus();
+                    },
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
                   ),
                 ),
                 textInputAction: TextInputAction.search,
                 onSubmitted: _search,
               ),
             ),
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(30),
-                ),
-                child: GoogleMap(
-                  initialCameraPosition: const CameraPosition(
-                    target: _initialPosition,
-                    zoom: 14,
-                  ),
-                  markers: _markers, // 保持しているマーカーセットを表示
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+
+          if (_isLoading) const Center(child: CircularProgressIndicator()),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          if (_mapController != null) {
+            _mapController!.animateCamera(
+              CameraUpdate.newLatLng(_initialPosition),
+            );
+          }
+        },
+        backgroundColor: Colors.white,
+        child: const Icon(Icons.my_location, color: Colors.green),
       ),
     );
   }

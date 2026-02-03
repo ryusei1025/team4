@@ -649,7 +649,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
       // 画面の基本構造（土台）
       backgroundColor: const Color(0xFFF6F7FB), // 背景色（薄いグレー）
       // 左側のドロワーメニュー（外部ファイルで定義されたWidget）
-      drawer: LeftMenuDrawer(lang: _lang, selectedArea: _selectedArea),
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: _selectedArea,
+        onLangChanged: (newLang) => setState(() => _lang = newLang),
+      ),
 
       // 上部のヘッダーバー（固定表示）
       appBar: AppBar(
@@ -661,7 +665,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           0,
           221,
           192,
-        ).withOpacity(0.8), // 少し透けさせて馴染ませる
+        ).withValues(alpha: 0.8), // 少し透けさせて馴染ませる
         // 左側のハンバーガーメニューボタン
         leading: Builder(
           // Scaffold.of(context)を正しく動作させるためにBuilderで新しいcontextを作成
@@ -695,7 +699,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   },
                 ),
               ),
-
               const SizedBox(width: 8), // 間隔
               // ---------------------------------------------
               // ② 番号を選ぶドロップダウン（幅の比率 4）
@@ -705,8 +708,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: _HeaderDropdown<String>(
                   label: 'No.',
                   value: _selectedArea,
-                  items: _areaData[_selectedWard]!,
-                  // 「中央区1」→「1」と表示
+                  items: _areaData[_selectedWard]!, // 「中央区1」→「1」と表示
                   itemLabel: (v) => v.replaceFirst(_selectedWard, ''),
                   width: null, // 自動幅
                   onChanged: (newArea) {
@@ -718,7 +720,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   },
                 ),
               ),
-
               const SizedBox(width: 8), // 間隔
               // ③ マップ確認ボタン（サイズ固定だがFlexible内にあるので安全）
               Container(
@@ -744,245 +745,258 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ),
 
-        // 右側の言語切り替えボタン
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: LanguageSelector(
-              currentLang: _lang,
-              onChanged: (v) => setState(() => _lang = v), // 言語変更時に全体を再描画
-            ),
-          ),
+        // ★右側の言語切り替えボタンがあった場所（修正箇所）
+        actions: const [
+          // 言語ボタンがあった場所に、同じくらいの幅の「透明な箱」を置く
+          // これでタイトルの位置ずれを防げます
+          SizedBox(width: 50),
         ],
       ),
 
       // メインコンテンツ部分（スクロール可能）
-      body: Scrollbar(
-        // スクロールバーを表示（PC/Webでの操作性向上）
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16), // 画面端からの余白
-          child: Center(
-            // 大画面でもコンテンツが広がりすぎないように中央寄せ
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520), // 最大幅を520pxに制限
-              child: Column(
-                // 要素を縦方向に並べる
-                children: [
-                  // 1. カレンダーカード（年月選択 + カレンダー本体）
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: const Color(0xFFE1E5EE),
-                      ), // 薄い枠線
-                    ),
-                    child: Column(
-                      children: [
-                        // --- 年月操作 ---
-                        Row(
-                          children: [
-                            // 年の操作
-                            Row(
-                              children: [
-                                // 「前の年」ボタン
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_back_ios,
-                                    size: 16,
+      body: Container(
+        // ★ グラデーション背景の適用
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.fromARGB(255, 247, 247, 209), // #ffffe0
+              Color.fromARGB(255, 199, 228, 199), // #f0fff0
+            ],
+          ),
+        ),
+        child: Scrollbar(
+          // スクロールバーを表示（PC/Webでの操作性向上）
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16), // 画面端からの余白
+            child: Center(
+              // 大画面でもコンテンツが広がりすぎないように中央寄せ
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 520,
+                ), // 最大幅を520pxに制限
+                child: Column(
+                  // 要素を縦方向に並べる
+                  children: [
+                    // 1. カレンダーカード（年月選択 + カレンダー本体）
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFE1E5EE),
+                        ), // 薄い枠線
+                      ),
+                      child: Column(
+                        children: [
+                          // --- 年月操作 ---
+                          Row(
+                            children: [
+                              // 年の操作
+                              Row(
+                                children: [
+                                  // 「前の年」ボタン
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.arrow_back_ios,
+                                      size: 16,
+                                    ),
+                                    // ★修正: _visibleYear を使用して判定
+                                    onPressed: _visibleYear > baseYear
+                                        ? () => _jumpToMonth(
+                                            _visibleYear - 1,
+                                            _visibleMonth,
+                                          )
+                                        : null,
                                   ),
-                                  // ★修正: _visibleYear を使用して判定
-                                  onPressed: _visibleYear > baseYear
-                                      ? () => _jumpToMonth(
-                                          _visibleYear - 1,
-                                          _visibleMonth,
-                                        )
-                                      : null,
-                                ),
-                                // 「年」のテキスト表示
-                                Text(
-                                  // ★修正: ここで _visibleYear を表示に使用
-                                  ' $_visibleYear年 ',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                // 「次の年」ボタン
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                  ),
-                                  // ★修正: _visibleYear を使用して判定
-                                  onPressed: _visibleYear < maxYear
-                                      ? () => _jumpToMonth(
-                                          _visibleYear + 1,
-                                          _visibleMonth,
-                                        )
-                                      : null,
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(width: 10),
-
-                            // 月の選択ドロップダウン
-                            Expanded(
-                              child: _LabeledDropdown<int>(
-                                label: '月',
-                                value: _visibleMonth,
-                                items: List.generate(12, (i) => i + 1),
-                                itemLabel: (v) => '$v',
-                                onChanged: (v) {
-                                  _jumpToMonth(_visibleYear, v);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // カレンダーグリッド本体
-                        AspectRatio(
-                          aspectRatio: 7 / 7, // 正方形に近い比率で固定
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFFCED6E6),
-                              ),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
-                              children: [
-                                // 曜日ヘッダー（日〜土）
-                                _WeekdayRow(lang: _lang),
-
-                                // 日付部分（スワイプ/スクロール可能なPageView）
-                                Expanded(
-                                  child: Listener(
-                                    // マウスホイールでの操作を検知
-                                    onPointerSignal: _handlePointerSignal,
-                                    child: PageView.builder(
-                                      controller: _pageController,
-                                      scrollDirection: Axis.vertical, // 縦スクロール
-                                      itemCount: totalMonths,
-                                      onPageChanged: (index) {
-                                        // ページ切り替え時に年月表示を同期
-                                        final m = _monthFromIndex(index);
-                                        setState(() {
-                                          _visibleYear = m.year;
-                                          _visibleMonth = m.month;
-                                          _pickedYear = m.year;
-                                          _pickedMonth = m.month;
-                                        });
-                                      },
-                                      itemBuilder: (context, index) {
-                                        final month = _monthFromIndex(index);
-                                        return _MonthGrid(
-                                          month: month,
-                                          selectedDate: _selectedDate,
-                                          garbageTypesOf:
-                                              _garbageTypesFor, // 日付ごとのゴミ種別判定
-                                          onDateTap: (d) => _onDateTap(
-                                            d,
-                                            currentMonth: month,
-                                          ), // タップ処理
-                                          lang: _lang,
-                                        );
-                                      },
+                                  // 「年」のテキスト表示
+                                  Text(
+                                    // ★修正: ここで _visibleYear を表示に使用
+                                    ' $_visibleYear年 ',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
+                                  // 「次の年」ボタン
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.arrow_forward_ios,
+                                      size: 16,
+                                    ),
+                                    // ★修正: _visibleYear を使用して判定
+                                    onPressed: _visibleYear < maxYear
+                                        ? () => _jumpToMonth(
+                                            _visibleYear + 1,
+                                            _visibleMonth,
+                                          )
+                                        : null,
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(width: 10),
+
+                              // 月の選択ドロップダウン
+                              Expanded(
+                                child: _LabeledDropdown<int>(
+                                  label: '月',
+                                  value: _visibleMonth,
+                                  items: List.generate(12, (i) => i + 1),
+                                  itemLabel: (v) => '$v',
+                                  onChanged: (v) {
+                                    _jumpToMonth(_visibleYear, v);
+                                  },
                                 ),
-                              ],
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          // カレンダーグリッド本体
+                          AspectRatio(
+                            aspectRatio: 7 / 7, // 正方形に近い比率で固定
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFCED6E6),
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                children: [
+                                  // 曜日ヘッダー（日〜土）
+                                  _WeekdayRow(lang: _lang),
+
+                                  // 日付部分（スワイプ/スクロール可能なPageView）
+                                  Expanded(
+                                    child: Listener(
+                                      // マウスホイールでの操作を検知
+                                      onPointerSignal: _handlePointerSignal,
+                                      child: PageView.builder(
+                                        controller: _pageController,
+                                        scrollDirection:
+                                            Axis.vertical, // 縦スクロール
+                                        itemCount: totalMonths,
+                                        onPageChanged: (index) {
+                                          // ページ切り替え時に年月表示を同期
+                                          final m = _monthFromIndex(index);
+                                          setState(() {
+                                            _visibleYear = m.year;
+                                            _visibleMonth = m.month;
+                                            _pickedYear = m.year;
+                                            _pickedMonth = m.month;
+                                          });
+                                        },
+                                        itemBuilder: (context, index) {
+                                          final month = _monthFromIndex(index);
+                                          return _MonthGrid(
+                                            month: month,
+                                            selectedDate: _selectedDate,
+                                            garbageTypesOf:
+                                                _garbageTypesFor, // 日付ごとのゴミ種別判定
+                                            onDateTap: (d) => _onDateTap(
+                                              d,
+                                              currentMonth: month,
+                                            ), // タップ処理
+                                            lang: _lang,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // 2. 選択された日の詳細情報カード
-                  _SelectedInfoCard(
-                    selectedDate: _selectedDate,
-                    lang: _lang,
-                    garbageTextOf: _garbageTextFor,
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // 3. 詳細ガイドの表示/非表示ボタン
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => setState(() => _showGuide = !_showGuide),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.all(12),
-                        minimumSize: const Size.fromHeight(48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        _showGuide
-                            ? (_lang == UiLang.ja ? '詳細情報を非表示' : 'Hide guide')
-                            : (_lang == UiLang.ja ? '詳細情報を表示' : 'Show guide'),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        ],
                       ),
                     ),
-                  ),
 
-                  // 4. ガイドパネル（アニメーション付き開閉）
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeOut,
-                    child: _showGuide
-                        ? Padding(
-                            key: const ValueKey('guide'),
-                            padding: const EdgeInsets.only(top: 10),
-                            child: _GarbageGuidePanel(lang: _lang),
-                          )
-                        : const SizedBox.shrink(key: ValueKey('empty')),
-                  ),
+                    const SizedBox(height: 12),
 
-                  const SizedBox(height: 10),
+                    // 2. 選択された日の詳細情報カード
+                    _SelectedInfoCard(
+                      selectedDate: _selectedDate,
+                      lang: _lang,
+                      garbageTextOf: _garbageTextFor,
+                    ),
 
-                  // 5. 重要なお知らせカード
-                  _ImportantNoticeCard(
-                    lang: _lang,
-                    selectedArea: _selectedArea,
-                    items:
-                        _importantNoticeByArea[_selectedArea] ??
-                        _commonImportantNotice,
-                  ),
+                    const SizedBox(height: 10),
 
-                  const SizedBox(height: 10),
+                    // 3. 詳細ガイドの表示/非表示ボタン
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () =>
+                            setState(() => _showGuide = !_showGuide),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.all(12),
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          _showGuide
+                              ? (_lang == UiLang.ja ? '詳細情報を非表示' : 'Hide guide')
+                              : (_lang == UiLang.ja ? '詳細情報を表示' : 'Show guide'),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
 
-                  // 6. お問い合わせカード
-                  _InquiryCard(
-                    lang: _lang,
-                    selectedArea: _selectedArea,
-                    lines: _inquiryByArea[_selectedArea] ?? _commonInquiry,
-                  ),
+                    // 4. ガイドパネル（アニメーション付き開閉）
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeOut,
+                      child: _showGuide
+                          ? Padding(
+                              key: const ValueKey('guide'),
+                              padding: const EdgeInsets.only(top: 10),
+                              child: _GarbageGuidePanel(lang: _lang),
+                            )
+                          : const SizedBox.shrink(key: ValueKey('empty')),
+                    ),
 
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
 
-                  // 7. 週間スケジュールカード（選択中の日付の週を表示）
-                  _WeeklyScheduleCard(
-                    lang: _lang,
-                    // selectedDateがnullの場合は現在日時を渡す安全策
-                    selectedDate: _selectedDate ?? DateTime.now(),
-                    garbageTypesOf: _garbageTypesFor,
-                  ),
-                ],
+                    // 5. 重要なお知らせカード
+                    _ImportantNoticeCard(
+                      lang: _lang,
+                      selectedArea: _selectedArea,
+                      items:
+                          _importantNoticeByArea[_selectedArea] ??
+                          _commonImportantNotice,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // 6. お問い合わせカード
+                    _InquiryCard(
+                      lang: _lang,
+                      selectedArea: _selectedArea,
+                      lines: _inquiryByArea[_selectedArea] ?? _commonInquiry,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // 7. 週間スケジュールカード（選択中の日付の週を表示）
+                    _WeeklyScheduleCard(
+                      lang: _lang,
+                      // selectedDateがnullの場合は現在日時を渡す安全策
+                      selectedDate: _selectedDate ?? DateTime.now(),
+                      garbageTypesOf: _garbageTypesFor,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

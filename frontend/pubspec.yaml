@@ -25,8 +25,14 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
     - assets/schedules.csv
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "Gem2.png" # 保存した画像のパス
+  min_sdk_android: 21

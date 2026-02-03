@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'notification_service.dart'; // 上記で作成したファイルをインポート
-import 'constants.dart'; // ★API通信に必要
-import 'package:http/http.dart' as http; // ★API通信に必要
-import 'dart:convert'; // ★JSON解析に必要
+import 'notification_service.dart';
+import 'constants.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
+// 言語設定の定義
 enum UiLang { ja, en }
 
 /// 全画面共通：言語選択ボタン
@@ -20,51 +21,29 @@ class LanguageSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: const Color(0xFFE7EBF3),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: Colors.white.withOpacity(0.9),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<UiLang>(
+          value: currentLang,
+          isDense: true,
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.green),
+          style: const TextStyle(
+            color: Colors.green,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                currentLang == UiLang.ja ? '言語: ' : 'Lang: ',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<UiLang>(
-                  value: currentLang,
-                  isDense: true,
-                  icon: const Icon(
-                    Icons.expand_more,
-                    size: 18,
-                    color: Colors.black,
-                  ),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: UiLang.ja, child: Text('日本語')),
-                    DropdownMenuItem(value: UiLang.en, child: Text('English')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) onChanged(v);
-                  },
-                ),
-              ),
-            ],
-          ),
+          items: const [
+            DropdownMenuItem(value: UiLang.ja, child: Text('日本語')),
+            DropdownMenuItem(value: UiLang.en, child: Text('English')),
+          ],
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
         ),
       ),
     );
@@ -75,11 +54,13 @@ class LanguageSelector extends StatelessWidget {
 class LeftMenuDrawer extends StatefulWidget {
   final UiLang lang;
   final String selectedArea;
+  final ValueChanged<UiLang> onLangChanged; // ★ これがないとエラーになります
 
   const LeftMenuDrawer({
     super.key,
     required this.lang,
     required this.selectedArea,
+    required this.onLangChanged, // ★ 必須
   });
 
   @override
@@ -95,7 +76,6 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     _loadNotificationSettings();
   }
 
-  // 保存されている設定を読み込む
   Future<void> _loadNotificationSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -103,182 +83,199 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     });
   }
 
-// 実際のスケジュールを取得して通知セット
   Future<void> _toggleNotification(bool value) async {
     setState(() {
       _isNotificationOn = value;
     });
-
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('notification_on', value);
+    await prefs.setBool('isNotificationOn', value);
 
     if (value) {
-      // ONにした場合：サーバーからデータを取って通知登録
-      // ※注意：本来は「中央区1」のような正確なIDが必要ですが、
-      // ここでは仮に widget.selectedArea に「中央区1」が入っている、
-      // または固定値としてテスト用に「中央区1」を使います。
-      
-      // 今の時期を取得
-      final now = DateTime.now();
-      
-      // エラーが出ないように try-catch で囲む
       try {
-        await NotificationService.cancelAll(); // 一旦古い予約をクリア
+        await NotificationService.cancelAll();
 
-        // 今月と来月のデータを取得して通知をセットする関数を呼ぶ
-        await _fetchAndSchedule(now.year, now.month, '中央区1');
-        
-        // 来月分も予備で取っておくと親切
+        final now = DateTime.now();
+        String areaId = "1";
+
+        await _fetchAndSchedule(now.year, now.month, areaId);
         final nextMonth = DateTime(now.year, now.month + 1, 1);
-        await _fetchAndSchedule(nextMonth.year, nextMonth.month, '中央区1');
+        await _fetchAndSchedule(nextMonth.year, nextMonth.month, areaId);
 
         await NotificationService.checkPendingNotifications();
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ゴミ出しスケジュールの通知を予約しました')),
-        );
-
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                widget.lang == UiLang.ja
+                    ? 'ゴミ出し通知を予約しました'
+                    : 'Notifications scheduled',
+              ),
+            ),
+          );
+        }
       } catch (e) {
         debugPrint('通知予約エラー: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('通知予約に失敗しました: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('通知予約に失敗しました: $e')));
+        }
       }
-
     } else {
-      // OFFにした場合：予約を全消し
       await NotificationService.cancelAll();
     }
   }
 
-  // サーバーから指定月のスケジュールを取得し、通知を登録するヘルパー関数
   Future<void> _fetchAndSchedule(int year, int month, String areaId) async {
-    // APIのエンドポイント（calendar_pageで使っているものと同じ想定）
-    final url = Uri.parse('${AppConstants.baseUrl}/api/schedules?year=$year&month=$month&area=$areaId');
-    
-    final response = await http.get(url);
-    if (response.statusCode != 200) return; // エラーなら何もしない
+    final url = Uri.parse(
+      '${AppConstants.baseUrl}/api/schedules?year=$year&month=$month&area=$areaId',
+    );
 
-    final List<dynamic> data = jsonDecode(response.body);
+    try {
+      final response = await http.get(url);
+      if (response.statusCode != 200) return;
 
-    int notificationId = year * 10000 + month * 100; // IDが被らないように工夫
+      final List<dynamic> data = jsonDecode(response.body);
+      int notificationBaseId = year * 10000 + month * 100;
+      int counter = 0;
 
-    for (var item in data) {
-      // データ例: {"date": "2025-10-01", "trash_type": {"name": "燃やせるゴミ", ...}, ...}
-      if (item['trash_type'] == null) continue; // ゴミがない日はスキップ
+      for (var item in data) {
+        if (item['type'] == null) continue;
 
-      final String dateStr = item['date']; // "2025-10-01"
-      final DateTime trashDate = DateTime.parse(dateStr);
-      final String trashName = item['trash_type']['name'];
+        final String dateStr = item['date'];
+        final DateTime trashDate = DateTime.parse(dateStr);
+        final String trashName = item['type'];
 
-      // --- ① 前日の夜21時に通知 ---
-      // ゴミの日の前日
-      final DateTime prevDay = trashDate.subtract(const Duration(days: 1));
-      
-      await NotificationService.scheduleDateNotification(
-        id: notificationId++, 
-        title: '明日のゴミ出し',
-        body: '明日は「$trashName」の日です。準備をしましょう。',
-        date: prevDay, 
-        hour: 21, 
-        minute: 0,
-      );
+        final DateTime prevDay = trashDate.subtract(const Duration(days: 1));
+        await NotificationService.scheduleDateNotification(
+          id: notificationBaseId + counter,
+          title: widget.lang == UiLang.ja ? '明日のゴミ出し' : 'Tomorrow\'s Garbage',
+          body: widget.lang == UiLang.ja
+              ? '明日は「$trashName」の日です。'
+              : 'Tomorrow is $trashName day.',
+          date: prevDay,
+          hour: 21,
+          minute: 0,
+        );
+        counter++;
 
-      // --- ② 当日の朝7時に通知 ---
-      await NotificationService.scheduleDateNotification(
-        id: notificationId++, 
-        title: '今日のゴミ出し',
-        body: '今日は「$trashName」の日です。忘れずに出しましょう！',
-        date: trashDate, 
-        hour: 7, 
-        minute: 0,
-      );
+        await NotificationService.scheduleDateNotification(
+          id: notificationBaseId + counter + 50,
+          title: widget.lang == UiLang.ja ? '今日のゴミ出し' : 'Today\'s Garbage',
+          body: widget.lang == UiLang.ja
+              ? '今日は「$trashName」の日です。忘れずに出しましょう！'
+              : 'Today is $trashName day.',
+          date: trashDate,
+          hour: 7,
+          minute: 0,
+        );
+        counter++;
+      }
+    } catch (e) {
+      debugPrint('スケジュール取得エラー: $e');
+      rethrow;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isJa = widget.lang == UiLang.ja;
+
     return Drawer(
       child: Column(
         children: [
-          // 上部：ナビゲーション項目
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
+          DrawerHeader(
+            decoration: const BoxDecoration(color: Colors.green),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DrawerHeader(
-                  decoration: const BoxDecoration(
-                    color: Color.fromARGB(255, 123, 226, 132),
-                  ),
-                  child: Text(
-                    widget.lang == UiLang.ja ? 'メニュー' : 'Menu',
-                    style: const TextStyle(color: Colors.white, fontSize: 24),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isJa ? 'メニュー' : 'Menu',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    LanguageSelector(
+                      currentLang: widget.lang,
+                      onChanged: widget.onLangChanged,
+                    ),
+                  ],
                 ),
-                ListTile(
-                  leading: const Icon(Icons.calendar_today),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'ホーム(カレンダー)' : 'Home(Calendar)',
-                  ),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.search),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'ゴミ分別辞書' : 'Dictionary',
-                  ),
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/search'),
-                ),
-                // 追加：ゴミ箱マップ
-                ListTile(
-                  leading: const Icon(Icons.map_outlined),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'ゴミ箱マップ' : 'Trash Bin Map',
-                  ),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/map'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.camera_alt),
-                  title: Text(
-                    widget.lang == UiLang.ja ? 'AIカメラ判定' : 'AI Camera',
-                  ),
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/camera'),
+                const SizedBox(height: 10),
+                Text(
+                  'Area: ${widget.selectedArea}',
+                  style: const TextStyle(color: Colors.white70),
                 ),
               ],
             ),
           ),
-
-          // 下部：通知スイッチエリア
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SwitchListTile(
-              secondary: Icon(
-                _isNotificationOn
-                    ? Icons.notifications_active
-                    : Icons.notifications_off,
-                color: _isNotificationOn ? Colors.orange : Colors.grey,
-              ),
-              title: Text(
-                widget.lang == UiLang.ja ? '通知設定' : 'Notifications',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                // ★ ここで言語設定 (widget.lang) を次の画面に渡しています
+                ListTile(
+                  leading: const Icon(Icons.calendar_month),
+                  title: Text(isJa ? 'ホーム' : 'Home'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/',
+                    arguments: widget.lang,
+                  ),
                 ),
-              ),
-              subtitle: Text(
-                _isNotificationOn
-                    ? (widget.lang == UiLang.ja ? 'オン' : 'ON')
-                    : (widget.lang == UiLang.ja ? 'オフ' : 'OFF'),
-                style: const TextStyle(fontSize: 12),
-              ),
-              value: _isNotificationOn,
-              onChanged: _toggleNotification,
+                ListTile(
+                  leading: const Icon(Icons.book),
+                  title: Text(isJa ? '分別辞書' : 'Dictionary'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/search',
+                    arguments: widget.lang,
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.map_outlined),
+                  title: Text(isJa ? 'ゴミ箱マップ' : 'Trash Bin Map'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/map',
+                    arguments: widget.lang,
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: Text(isJa ? 'AI判定' : 'AI Scan'),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    '/camera',
+                    arguments: widget.lang,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10), // 画面最下部の余白
+          const Divider(height: 1),
+          SwitchListTile(
+            secondary: Icon(
+              _isNotificationOn
+                  ? Icons.notifications_active
+                  : Icons.notifications_off,
+              color: _isNotificationOn ? Colors.orange : Colors.grey,
+            ),
+            title: Text(isJa ? '通知設定' : 'Notifications'),
+            subtitle: Text(
+              _isNotificationOn ? (isJa ? 'オン' : 'ON') : (isJa ? 'オフ' : 'OFF'),
+              style: const TextStyle(fontSize: 12),
+            ),
+            value: _isNotificationOn,
+            onChanged: _toggleNotification,
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );
