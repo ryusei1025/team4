@@ -50,7 +50,7 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const CalendarScreen(),
-        '/dictionary': (context) => const SearchScreen(),
+        '/search': (context) => const SearchScreen(),
         '/camera': (context) => const CameraScreen(),
         '/map': (context) => const TrashBinMapScreen(), // ★マップ画面のルートを追加
       },
