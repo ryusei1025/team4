@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart'; // ← 追加
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'constants.dart';
+// ★修正: 使われていない import 'constants.dart'; を削除しました
 
 class TrashBin {
   final int id;

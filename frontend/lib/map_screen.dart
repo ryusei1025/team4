@@ -4,39 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'trash_bin_api.dart';
+import 'trash_bin_api.dart'; // API側のTrashBinクラスを使用します
 import 'drawer_menu.dart';
-import 'constants.dart';
 
-// ゴミ箱データモデル
-class TrashBin {
-  final int id;
-  final String name;
-  final String address;
-  final double lat;
-  final double lng;
-  final String type;
-
-  TrashBin({
-    required this.id,
-    required this.name,
-    required this.address,
-    required this.lat,
-    required this.lng,
-    required this.type,
-  });
-
-  factory TrashBin.fromJson(Map<String, dynamic> json) {
-    return TrashBin(
-      id: json['id'] ?? 0,
-      name: json['name'] ?? '',
-      address: json['address'] ?? '',
-      lat: (json['lat'] ?? 0.0).toDouble(),
-      lng: (json['lng'] ?? 0.0).toDouble(),
-      type: json['type'] ?? 'unknown',
-    );
-  }
-}
+// ★削除: ここにあった class TrashBin { ... } は削除しました。
+// trash_bin_api.dart の定義を使用することで型不一致エラーを解消します。
 
 class TrashBinMapScreen extends StatefulWidget {
   const TrashBinMapScreen({super.key});
@@ -47,6 +19,9 @@ class TrashBinMapScreen extends StatefulWidget {
 
 class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   GoogleMapController? _mapController;
+
+  // ★追加: 言語設定用の変数 (Undefined name '_lang' エラーの修正)
+  UiLang _lang = UiLang.ja;
 
   List<TrashBin> _allBins = [];
   List<TrashBin> _searchedBins = [];
@@ -70,6 +45,18 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   void initState() {
     super.initState();
     _loadBins();
+  }
+
+  // ★追加: 画面遷移時に引数を受け取る処理
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is UiLang) {
+      setState(() {
+        _lang = args;
+      });
+    }
   }
 
   Future<void> _loadBins() async {
@@ -147,6 +134,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     _markers = _filteredBins.map((bin) {
       return Marker(
         markerId: MarkerId(bin.id.toString()),
+        // API側の定義(lon)を使用するため、ここはエラーになりません
         position: LatLng(bin.lat, bin.lon),
         infoWindow: InfoWindow(
           title: bin.name,
@@ -311,10 +299,18 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     final isJa = _lang == UiLang.ja;
 
     return Scaffold(
-      // ★ 追加：メニューバー復活
-      appBar: AppBar(elevation: 0),
+      // ★修正: isJa変数を使用してタイトルを設定 (未使用エラーの解消)
+      appBar: AppBar(
+        title: Text(isJa ? 'ゴミ箱マップ' : 'Trash Map'),
+        elevation: 0,
+      ),
 
-      drawer: const LeftMenuDrawer(lang: UiLang.ja, selectedArea: '札幌市'),
+      // ★修正: onLangChangedを追加 (必須パラメータエラーの解消)
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: '札幌市',
+        onLangChanged: (newLang) => setState(() => _lang = newLang),
+      ),
 
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 

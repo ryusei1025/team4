@@ -617,11 +617,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      drawer: LeftMenuDrawer(lang: _lang, selectedArea: _selectedArea),
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: _selectedArea,
+        onLangChanged: (UiLang newLang) {
+          _loadTranslations(newLang);
+        },
+      ),
 
       // --- AppBar ---
       appBar: AppBar(
-        centerTitle: true,
+        centerTitle: true, // これが重要
         titleSpacing: 0,
         backgroundColor: const Color.fromARGB(
           255,
@@ -635,92 +641,76 @@ class _CalendarScreenState extends State<CalendarScreen> {
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
-        title: Container(
-          padding: EdgeInsets.zero,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ① 区を選ぶドロップダウン
-              Flexible(
-                flex: 5,
-                child: _HeaderDropdown<String>(
-                  // ラベル: 日本語なら「区」、英語なら「Ward」
-                  label: _trans['ward'] ?? '区',
-                  value: _selectedWard,
-                  items: _wardList,
-                  // ★修正: リストの中身の表示名を言語で切り替え
-                  // 日本語ならそのまま(v)、英語ならマップから変換(_wardNamesEn[v])
-                  itemLabel: (v) =>
-                      _lang == UiLang.ja ? v : (_wardNamesEn[v] ?? v),
-                  width: null,
-                  onChanged: (newWard) {
-                    setState(() {
-                      _selectedWard = newWard;
-                      _selectedArea = _areaData[newWard]!.first;
-                    });
-                  },
-                ),
+        // ★修正: Containerをやめて、制約のない状態でRowを置く
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
+          mainAxisSize: MainAxisSize.min, // コンテンツの幅に合わせる
+          children: [
+            // ① 区を選ぶドロップダウン
+            // Flexibleだと縮みすぎてしまうことがあるので、Containerで幅を指定するか、
+            // そのまま置いてみるのが良いです。ここではConstrainedBoxで最大幅を制限します。
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140), // 幅を程よく制限
+              child: _HeaderDropdown<String>(
+                label: _trans['ward'] ?? '区',
+                value: _selectedWard,
+                items: _wardList,
+                itemLabel: (v) =>
+                    _lang == UiLang.ja ? v : (_wardNamesEn[v] ?? v),
+                width: null,
+                onChanged: (newWard) {
+                  setState(() {
+                    _selectedWard = newWard;
+                    _selectedArea = _areaData[newWard]!.first;
+                  });
+                },
               ),
-
-              const SizedBox(width: 8),
-
-              // ② 番号を選ぶドロップダウン
-              Expanded(
-                flex: 4,
-                child: _HeaderDropdown<String>(
-                  label: 'No.', // "No."は英語・日本語共通でOK
-                  value: _selectedArea,
-                  items: _areaData[_selectedWard]!,
-                  // 「中央区1」から「中央区」を消して「1」だけ表示（数字なので翻訳不要）
-                  itemLabel: (v) => v.replaceFirst(_selectedWard, ''),
-                  width: null,
-                  onChanged: (newArea) {
-                    setState(() {
-                      _selectedArea = newArea;
-                    });
-                    _loadScheduleData();
-                  },
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // ③ マップ確認ボタン
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE7EBF3),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE1E5EE)),
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    Icons.map_outlined,
-                    size: 20,
-                    color: Colors.blueGrey,
-                  ),
-                  // ツールチップの翻訳
-                  tooltip: _lang == UiLang.ja ? '地図を確認' : 'Check Map',
-                  onPressed: _showAreaMapDialog,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: LanguageSelector(
-              currentLang: _lang,
-              onChanged: (v) {
-                _loadTranslations(v);
-              },
             ),
-          ),
-        ],
+
+            const SizedBox(width: 8),
+
+            // ② 番号を選ぶドロップダウン
+            ConstrainedBox(
+               constraints: const BoxConstraints(maxWidth: 100), // 幅を程よく制限
+               child: _HeaderDropdown<String>(
+                label: 'No.',
+                value: _selectedArea,
+                items: _areaData[_selectedWard]!,
+                itemLabel: (v) => v.replaceFirst(_selectedWard, ''),
+                width: null,
+                onChanged: (newArea) {
+                  setState(() {
+                    _selectedArea = newArea;
+                  });
+                  _loadScheduleData();
+                },
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // ③ マップ確認ボタン
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE7EBF3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE1E5EE)),
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.map_outlined,
+                  size: 20,
+                  color: Colors.blueGrey,
+                ),
+                tooltip: _lang == UiLang.ja ? '地図を確認' : 'Check Map',
+                onPressed: _showAreaMapDialog,
+              ),
+            ),
+          ],
+        ),
       ),
 
       // --- Body ---

@@ -70,7 +70,7 @@ class _CameraScreenState extends State<CameraScreen> {
       if (image != null) {
         // Web用にデータを読み込む
         final bytes = await image.readAsBytes();
-        
+
         setState(() {
           _webImageBytes = bytes;
           _trashName = null;
@@ -79,7 +79,8 @@ class _CameraScreenState extends State<CameraScreen> {
           _isLoading = true;
         });
 
-      _analyzeTrash(bytes);
+        _analyzeTrash(bytes);
+      }
     } catch (e) {
       print("Error picking image: $e");
     }
@@ -200,9 +201,7 @@ class _CameraScreenState extends State<CameraScreen> {
                           ),
                         ),
                 ),
-
                 const SizedBox(height: 32),
-
                 if (_isLoading)
                   Column(
                     children: [
@@ -254,7 +253,6 @@ class _CameraScreenState extends State<CameraScreen> {
                           ),
                           textAlign: TextAlign.center,
                         ),
-
                         if (_confidence != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -268,7 +266,6 @@ class _CameraScreenState extends State<CameraScreen> {
                               ),
                             ),
                           ),
-
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -301,7 +298,6 @@ class _CameraScreenState extends State<CameraScreen> {
                       ],
                     ),
                   ),
-
                 const SizedBox(height: 80),
               ],
             ),
