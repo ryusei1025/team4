@@ -4,6 +4,7 @@ import 'drawer_menu.dart'; // ドロワーメニューや言語設定
 import 'package:csv/csv.dart'; // CSV解析用
 import 'package:flutter/services.dart' show rootBundle; // アセット読み込み用
 import 'dart:convert'; // JSONデコード用
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ==========================================
 // 1. 共通定義：ゴミ種別・基本設定
@@ -298,6 +299,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     super.initState();
 
     _updateWardFromArea();
+    _loadLanguageSetting();
 
     final now = DateTime.now();
 
@@ -393,6 +395,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
     } catch (e) {
       print('Error loading CSV: $e');
+    }
+  }
+
+  Future<void> _loadLanguageSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedLang = prefs.getString('app_lang'); // 保存された言語を取得
+    if (savedLang != null) {
+      setState(() {
+        // 保存された言語コード(ja, en...)をUiLang型に変換してセット
+        _lang = UiLang.values.firstWhere(
+          (e) => e.name == savedLang,
+          orElse: () => UiLang.ja,
+        );
+      });
+      
+      // ★重要: 言語が変わったので、カレンダーの翻訳データも再読み込みが必要かもしれません
+      // もし _loadTranslations(_lang); のような処理がある場合は、ここでも呼んでください
+      _loadTranslations(_lang); 
     }
   }
 

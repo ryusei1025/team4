@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'drawer_menu.dart';
 import 'category_items_screen.dart';
 import 'constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -30,16 +31,25 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     _fetchDictionary();
+    _loadLanguageSetting();
+  }
+
+  Future<void> _loadLanguageSetting() async {
+    final prefs = await SharedPreferences.getInstance(); // import 'package:shared_preferences/shared_preferences.dart'; が必要です
+    final savedLang = prefs.getString('app_lang');
+    if (savedLang != null) {
+      setState(() {
+        _lang = UiLang.values.firstWhere(
+          (e) => e.name == savedLang,
+          orElse: () => UiLang.ja,
+        );
+      });
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is UiLang && _lang != args) {
-      _lang = args;
-      _fetchDictionary();
-    }
   }
 
   @override
