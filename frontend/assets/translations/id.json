@@ -93,5 +93,14 @@
     "Jam Operasional: [Hari Kerja 8:00 - 21:00]",
     "Sabtu/Minggu/Libur: [9:00 - 17:00]",
     "Situs Resmi: https://www.city.sapporo.jp/seiso/kaisyu/index.html"
-  ]
+  ],
+
+  "camera_title": "Pemindaian Sampah AI",
+  "camera_guide": "Ambil foto atau pilih dari galeri",
+  "camera_analyzing": "AI sedang menganalisis...",
+  "camera_result": "Hasil",
+  "camera_confidence": "Tingkat Kepercayaan",
+  "camera_btn_gallery": "Galeri",
+  "camera_btn_camera": "Kamera",
+  "camera_error": "Kesalahan"
 }

@@ -12,7 +12,7 @@ enum UiLang { ja, en, zh, ko, ru, vi, id }
 class LanguageSelector extends StatelessWidget {
   final UiLang currentLang;
   final ValueChanged<UiLang> onChanged;
-  final String Function(String) t;
+  final String Function(String) t; // これは呼び出し元の互換性のために残しますが、中では使いません
 
   const LanguageSelector({
     super.key,
@@ -20,6 +20,26 @@ class LanguageSelector extends StatelessWidget {
     required this.onChanged,
     required this.t,
   });
+
+  // ★ここがポイント：各言語コードに対応する「母国語表記」を定義します
+  String _getNativeName(UiLang lang) {
+    switch (lang) {
+      case UiLang.ja:
+        return '日本語';
+      case UiLang.en:
+        return 'English';
+      case UiLang.zh:
+        return '中文';
+      case UiLang.ko:
+        return '한국어';
+      case UiLang.ru:
+        return 'Русский';
+      case UiLang.vi:
+        return 'Tiếng Việt';
+      case UiLang.id:
+        return 'Bahasa Indonesia';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,11 +65,11 @@ class LanguageSelector extends StatelessWidget {
                 if (newValue != null) onChanged(newValue);
               },
               items: UiLang.values.map((UiLang lang) {
-                final String key = 'lang_${lang.name}';
+                // ★修正箇所：t(key) をやめて、直接 _getNativeName(lang) を表示します
                 return DropdownMenuItem<UiLang>(
                   value: lang,
                   child: Text(
-                    t(key),
+                    _getNativeName(lang), 
                     style: const TextStyle(fontSize: 13, color: Colors.black87),
                   ),
                 );

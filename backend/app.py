@@ -209,7 +209,7 @@ def trash_search():
         return jsonify([])
 
 
-# 機能F: AI判定 (変更なし)
+# 機能F: AI判定 (言語対応版)
 @app.route('/api/predict_trash', methods=['POST'])
 def predict_trash():
     if 'image' not in request.files:
@@ -219,25 +219,49 @@ def predict_trash():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
+    # ★ フロントエンドから言語コードを取得 (デフォルトは 'ja')
+    user_lang = request.form.get('lang', 'ja')
+
     try:
         if not GEMINI_API_KEY:
             return jsonify({"error": "Server API Key not configured"}), 500
 
         img = Image.open(file.stream)
-        prompt = """
+
+        # ★ 言語コードに対応する「AIへの指示言語名」を定義
+        # ここで定義するだけで十分高速です（外部ファイルにする必要はありません）
+        lang_map = {
+            'ja': 'Japanese',
+            'en': 'English',
+            'zh': 'Simplified Chinese',
+            'ko': 'Korean',
+            'ru': 'Russian',
+            'vi': 'Vietnamese',
+            'id': 'Indonesian',
+            # 必要に応じて他の言語を追加
+        }
+
+        # 指定された言語がない場合は 'Japanese' を使う
+        target_language = lang_map.get(user_lang, 'Japanese')
+
+        # ★ プロンプトの中に target_language を埋め込む
+        prompt = f"""
         Analyze this image and identify the trash item.
         Return ONLY a JSON object with this exact format:
-        {
-            "name": "Item Name (Japanese)",
-            "type": "Burnable/Non-burnable/Recyclable/etc (Japanese)",
+        {{
+            "name": "Item Name ({target_language})",
+            "type": "Burnable/Non-burnable/Recyclable/etc ({target_language})",
             "confidence": 0.95,
-            "reason": "Reason for classification (Japanese)"
-        }
+            "reason": "Reason for classification ({target_language})"
+        }}
         """
+        # ↑ ここで {target_language} の部分が 'English' や 'Vietnamese' に置き換わります。
+        # JSONのキー ("name", "type") は英語のままにしておくのがプログラム的に安全です。
+        # AIは「値」の部分だけを指定された言語で返してくれます。
 
         client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-flash-latest",
             contents=[img, prompt]
         )
 
@@ -249,7 +273,7 @@ def predict_trash():
         return jsonify(result_json)
 
     except Exception as e:
-        print(e)
+        print(f"AI Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

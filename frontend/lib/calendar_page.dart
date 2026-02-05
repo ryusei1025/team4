@@ -545,76 +545,136 @@ class _CalendarScreenState extends State<CalendarScreen> {
   /// 選択中の地域名から、対応する地図画像のパスを返す
   String _getAreaMapAssetPath(String areaName) {
     // プレフィックス（前方一致）で判定します
-    if (areaName.startsWith('中央区')) return 'assets/images/map_chuo.png';
-    if (areaName.startsWith('北区')) return 'assets/images/map_kita.png';
-    if (areaName.startsWith('東区')) return 'assets/images/map_higashi.png';
-    if (areaName.startsWith('白石区')) return 'assets/images/map_shiroishi.png';
-    if (areaName.startsWith('厚別区')) return 'assets/images/map_atsubetsu.png';
-    if (areaName.startsWith('豊平区')) return 'assets/images/map_toyohira.png';
-    if (areaName.startsWith('清田区')) return 'assets/images/map_kiyota.png';
-    if (areaName.startsWith('南区')) return 'assets/images/map_minami.png';
-    if (areaName.startsWith('西区')) return 'assets/images/map_nishi.png';
-    if (areaName.startsWith('手稲区')) return 'assets/images/map_teine.png';
+    if (areaName.startsWith('中央区')) return 'assets/images/01_chuo_area_map_1.gif';
+    if (areaName.startsWith('北区')) return 'assets/images/02_kita_area_map_1.gif';
+    if (areaName.startsWith('東区')) return 'assets/images/03_higashi_area_map_1.gif';
+    if (areaName.startsWith('白石区')) return 'assets/images/04_shiroishi_area_map_1.gif';
+    if (areaName.startsWith('厚別区')) return 'assets/images/05_atsubetsu_area_map_1.gif';
+    if (areaName.startsWith('豊平区')) return 'assets/images/06_toyohira_area_map_1.gif';
+    if (areaName.startsWith('清田区')) return 'assets/images/07_kiyota_area_map_1.gif';
+    if (areaName.startsWith('南区')) return 'assets/images/08_minami_area_map_2.gif';
+    if (areaName.startsWith('西区')) return 'assets/images/09_nishi_area_map_1.gif';
+    if (areaName.startsWith('手稲区')) return 'assets/images/10_teine_area_map_1.gif';
 
     return ''; // 画像がない場合
   }
 
-  /// 地図画像をポップアップで表示する
+  /// 地図画像をポップアップで表示する（ドロップダウンで切り替え可能）
   void _showAreaMapDialog() {
-    final path = _getAreaMapAssetPath(_selectedArea);
-    if (path.isEmpty) return;
+    // 1. 現在選択中のエリア（例："中央区1"）から、区の名前（例："中央区"）を取り出して初期値にする
+    String currentViewArea = _selectedArea.replaceAll(RegExp(r'[0-9]'), '');
+    
+    // 万が一リストにない名前だった場合の安全策
+    if (!_areaData.containsKey(currentViewArea)) {
+      currentViewArea = _areaData.keys.first; // リストの最初（中央区）にする
+    }
 
     showDialog(
       context: context,
       builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // 内容に合わせて高さを調整
-            children: [
-              // ヘッダー（タイトルと閉じるボタン）
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // ★重要: ダイアログの中で画面を書き換えるために StatefulBuilder を使う
+        return StatefulBuilder(
+          builder: (context, setStateInDialog) {
+            
+            // 選択された区に対応する画像パスを取得
+            final path = _getAreaMapAssetPath(currentViewArea);
+
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // --- ヘッダー（ドロップダウンと閉じるボタン） ---
                     Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: Text(
-                        '$_selectedArea のエリア',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // ▼ ここをテキストからドロップダウンに変更
+                          Row(
+                            children: [
+                              DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: currentViewArea,
+                                  icon: const Icon(Icons.arrow_drop_down, color: Colors.green),
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18, // 少し大きくして見やすく
+                                  ),
+                                  onChanged: (String? newValue) {
+                                    if (newValue != null) {
+                                      // ★ダイアログ内の表示を更新（画像を切り替え）
+                                      setStateInDialog(() {
+                                        currentViewArea = newValue;
+                                      });
+                                    }
+                                  },
+                                  // _areaDataのキー（区の名前一覧）からリストを作る
+                                  items: _areaData.keys.map<DropdownMenuItem<String>>((String value) {
+                                    return DropdownMenuItem<String>(
+                                      value: value,
+                                      child: Text(value),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                              const Text(
+                                ' のエリア',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          // 閉じるボタン
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
+                    
+                    // --- 画像表示エリア（拡大縮小対応） ---
+                    Flexible(
+                      child: Container(
+                        color: Colors.grey[100],
+                        width: double.infinity,
+                        height: 400,
+                        child: InteractiveViewer(
+                          minScale: 0.5,
+                          maxScale: 5.0,
+                          panEnabled: true,
+                          child: Image.asset(
+                            path,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(20.0),
+                                  child: Text(
+                                    '画像が見つかりませんでした。\n(assets/images/を確認してください)',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              // 画像表示エリア
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Image.asset(
-                    path,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      // 画像が見つからない場合のエラー表示
-                      return const Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Text(
-                          '画像が見つかりませんでした。\n(assets/images/を確認してください)',
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
+            );
+          },
         );
       },
     );
