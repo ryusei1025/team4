@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:shared_preferences/shared_preferences.dart'; // ★追加: 設定読み込み用
 import 'constants.dart';
 import 'drawer_menu.dart';
 
@@ -28,24 +29,44 @@ class _CameraScreenState extends State<CameraScreen> {
 
   // 言語設定
   UiLang _lang = UiLang.ja;
+  
+  // ★追加: メニューのヘッダーに表示するための地域設定
+  String _selectedArea = '中央区';
 
   @override
   void initState() {
     super.initState();
+    _loadMenuSettings(); // ★追加: 設定を読み込む
+    _loadLanguageSetting(); // ★追加: 言語設定を読み込む
+  }
+
+  // ★追加: メニュー表示用に保存された地域を読み込む
+  Future<void> _loadMenuSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // 通知設定で保存された地域があればそれを、なければデフォルトを表示
+      _selectedArea = prefs.getString('noti_area') ?? '中央区';
+    });
+  }
+
+  // ★追加: 保存された言語を読み込む関数
+  Future<void> _loadLanguageSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedLang = prefs.getString('app_lang');
+    if (savedLang != null) {
+      setState(() {
+        _lang = UiLang.values.firstWhere(
+          (e) => e.name == savedLang,
+          orElse: () => UiLang.ja,
+        );
+      });
+    }
   }
 
   // 画面遷移時に言語設定を受け取る
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is UiLang) {
-      if (_lang != args) {
-        setState(() {
-          _lang = args;
-        });
-      }
-    }
   }
 
   Color _getTrashColor(String type) {
@@ -150,10 +171,10 @@ class _CameraScreenState extends State<CameraScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
         ),
-        // ★ 修正箇所：onLangChanged を追加
+        // ★ 修正箇所：地域情報を渡し、言語変更コールバックを設定
         drawer: LeftMenuDrawer(
           lang: _lang,
-          selectedArea: '中央区',
+          selectedArea: _selectedArea, // 読み込んだ地域を渡す
           onLangChanged: (newLang) => setState(() => _lang = newLang),
         ),
         body: SingleChildScrollView(

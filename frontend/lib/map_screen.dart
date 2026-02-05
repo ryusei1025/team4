@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'trash_bin_api.dart'; // API側のTrashBinクラスを使用します
 import 'drawer_menu.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ★削除: ここにあった class TrashBin { ... } は削除しました。
 // trash_bin_api.dart の定義を使用することで型不一致エラーを解消します。
@@ -45,6 +46,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   void initState() {
     super.initState();
     _loadBins();
+    _loadLanguageSetting();
   }
 
   // ★追加: 画面遷移時に引数を受け取る処理
@@ -67,6 +69,19 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
       _filteredBins = [];
       _markers = {};
     });
+  }
+
+  Future<void> _loadLanguageSetting() async {
+    final prefs = await SharedPreferences.getInstance(); // import 'package:shared_preferences/shared_preferences.dart'; が必要です
+    final savedLang = prefs.getString('app_lang');
+    if (savedLang != null) {
+      setState(() {
+        _lang = UiLang.values.firstWhere(
+          (e) => e.name == savedLang,
+          orElse: () => UiLang.ja,
+        );
+      });
+    }
   }
 
   /// ======================
