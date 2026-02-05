@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:csv/csv.dart';
 import 'notification_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'bunbetujisho.dart'; // SearchScreen をインポート
 
 enum UiLang { ja, en, zh, ko, ru, vi, id }
 
@@ -51,9 +52,7 @@ class LanguageSelector extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.grey.shade300,
-            ),
+            border: Border.all(color: Colors.grey.shade300),
             color: Colors.white,
           ),
           child: DropdownButtonHideUnderline(
@@ -108,7 +107,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
   bool _isNotificationOn = false;
   String _targetWard = '中央区';
   String _targetArea = '中央区1';
-  
+
   // 次回の予定データ
   int? _nextTrashId;
   DateTime? _nextNotificationTime;
@@ -160,7 +159,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
   Future<void> _loadTranslations() async {
     try {
       final langCode = _currentLang.name;
-      final jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      final jsonString = await rootBundle.loadString(
+        'assets/translations/$langCode.json',
+      );
       final data = json.decode(jsonString);
 
       if (mounted) {
@@ -192,21 +193,25 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     setState(() {
       _isNotificationOn = prefs.getBool('noti_is_on') ?? false;
       _targetWard = prefs.getString('noti_ward') ?? _areaData.keys.first;
-      _targetArea = prefs.getString('noti_area') ?? _areaData[_targetWard]!.first;
+      _targetArea =
+          prefs.getString('noti_area') ?? _areaData[_targetWard]!.first;
       _notifyDayBefore = prefs.getBool('noti_day_before') ?? true;
       _notifyDayOf = prefs.getBool('noti_day_of') ?? true;
 
       final tb = prefs.getString('noti_time_before');
       if (tb != null) {
         final p = tb.split(':');
-        _timeDayBefore = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+        _timeDayBefore = TimeOfDay(
+          hour: int.parse(p[0]),
+          minute: int.parse(p[1]),
+        );
       }
       final to = prefs.getString('noti_time_of');
       if (to != null) {
         final p = to.split(':');
         _timeDayOf = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
       }
-      
+
       _nextTrashId = prefs.getInt('noti_next_id');
       final timeStr = prefs.getString('noti_next_time');
       if (timeStr != null) {
@@ -222,17 +227,26 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     await prefs.setString('noti_area', _targetArea);
     await prefs.setBool('noti_day_before', _notifyDayBefore);
     await prefs.setBool('noti_day_of', _notifyDayOf);
-    await prefs.setString('noti_time_before', '${_timeDayBefore.hour}:${_timeDayBefore.minute}');
-    await prefs.setString('noti_time_of', '${_timeDayOf.hour}:${_timeDayOf.minute}');
-    
+    await prefs.setString(
+      'noti_time_before',
+      '${_timeDayBefore.hour}:${_timeDayBefore.minute}',
+    );
+    await prefs.setString(
+      'noti_time_of',
+      '${_timeDayOf.hour}:${_timeDayOf.minute}',
+    );
+
     if (_nextTrashId != null) {
       await prefs.setInt('noti_next_id', _nextTrashId!);
     } else {
       await prefs.remove('noti_next_id');
     }
-    
+
     if (_nextNotificationTime != null) {
-      await prefs.setString('noti_next_time', _nextNotificationTime!.toIso8601String());
+      await prefs.setString(
+        'noti_next_time',
+        _nextNotificationTime!.toIso8601String(),
+      );
     } else {
       await prefs.remove('noti_next_time');
     }
@@ -290,9 +304,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     await _saveSettings();
     await NotificationService().cancelAll();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(t('msg_off'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(t('msg_off'))));
     }
   }
 
@@ -397,8 +411,10 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
               );
               if (picked != null) {
                 setStateDialog(() {
-                  if (isBefore) tempTimeBefore = picked;
-                  else tempTimeOf = picked;
+                  if (isBefore)
+                    tempTimeBefore = picked;
+                  else
+                    tempTimeOf = picked;
                 });
               }
             }
@@ -489,8 +505,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     await NotificationService().cancelAll();
 
     try {
-      final rawData = await DefaultAssetBundle.of(context)
-          .loadString('assets/schedules.csv');
+      final rawData = await DefaultAssetBundle.of(
+        context,
+      ).loadString('assets/schedules.csv');
       List<List<dynamic>> rows = const CsvToListConverter().convert(rawData);
 
       if (rows.isEmpty) return;
@@ -515,7 +532,8 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
           continue;
         }
 
-        if (trashDate.isBefore(DateTime(now.year, now.month, now.day))) continue;
+        if (trashDate.isBefore(DateTime(now.year, now.month, now.day)))
+          continue;
 
         final cellValue = row[columnIndex];
         final garbageId = int.tryParse(cellValue.toString());
@@ -547,8 +565,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
               scheduledCount++;
 
               if (nearestNotificationTime == null ||
-                  scheduledDateTime.isBefore(nearestNotificationTime)) { // ここは ! を削除すると別のエラーになる可能性があるため、ロジックとして残しますが警告が出る場合は削除してください
-                  // もしここで警告が出る場合、nearestNotificationTime! の ! を削除してください
+                  scheduledDateTime.isBefore(nearestNotificationTime)) {
+                // ここは ! を削除すると別のエラーになる可能性があるため、ロジックとして残しますが警告が出る場合は削除してください
+                // もしここで警告が出る場合、nearestNotificationTime! の ! を削除してください
                 nearestNotificationTime = scheduledDateTime;
                 nearestGarbageId = garbageId;
               }
@@ -578,7 +597,8 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
               // 修正箇所：警告回避のため ! を削除 (if文でnullチェック済み)
               if (nearestNotificationTime == null ||
-                  scheduledDateTime.isBefore(nearestNotificationTime)) { // 警告が出る場合は ! を削除
+                  scheduledDateTime.isBefore(nearestNotificationTime)) {
+                // 警告が出る場合は ! を削除
                 nearestNotificationTime = scheduledDateTime;
                 nearestGarbageId = garbageId;
               }
@@ -635,8 +655,9 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
       dayLabel = "${notifTime.month}/${notifTime.day}";
     }
 
-    final timeStr = "${notifTime.hour}:${notifTime.minute.toString().padLeft(2, '0')}";
-    
+    final timeStr =
+        "${notifTime.hour}:${notifTime.minute.toString().padLeft(2, '0')}";
+
     // 現在の言語設定でゴミの名前を取得
     final trashName = _getTrashNameFromId(trashId);
 
@@ -727,10 +748,14 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                 ListTile(
                   leading: const Icon(Icons.book),
                   title: Text(t('dictionary')),
-                  onTap: () => Navigator.pushReplacementNamed(
+                  onTap: () => Navigator.push(
                     context,
-                    '/search',
-                    arguments: widget.lang,
+                    MaterialPageRoute(
+                      builder: (context) => SearchScreen(
+                        // ★ここで「今の言語」をバトン渡しする！
+                        initialLang: widget.lang,
+                      ),
+                    ),
                   ),
                 ),
                 ListTile(
