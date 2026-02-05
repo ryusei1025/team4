@@ -93,5 +93,14 @@
     "受付時間 : [平日 8:00〜21:00]",
     "土日祝 : [9:00〜17:00]",
     "札幌市公式ウェブサイト : https://www.city.sapporo.jp/seiso/kaisyu/index.html"
-  ]
+  ],
+
+  "camera_title": "AIゴミ判定",
+  "camera_guide": "写真を撮影または選択してください",
+  "camera_analyzing": "AIが解析中...",
+  "camera_result": "解析結果",
+  "camera_confidence": "AI確信度",
+  "camera_btn_gallery": "アルバム",
+  "camera_btn_camera": "撮影",
+  "camera_error": "エラー"
 }

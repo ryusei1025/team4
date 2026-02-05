@@ -93,5 +93,14 @@
     "Giờ làm việc: [Ngày thường 8:00 - 21:00]",
     "T7/CN/Ngày lễ: [9:00 - 17:00]",
     "Trang web chính thức: https://www.city.sapporo.jp/seiso/kaisyu/index.html"
-  ]
+  ],
+
+  "camera_title": "Quét rác AI",
+  "camera_guide": "Chụp ảnh hoặc chọn từ thư viện",
+  "camera_analyzing": "Đang phân tích...",
+  "camera_result": "Kết quả",
+  "camera_confidence": "Độ tin cậy",
+  "camera_btn_gallery": "Thư viện",
+  "camera_btn_camera": "Máy ảnh",
+  "camera_error": "Lỗi"
 }

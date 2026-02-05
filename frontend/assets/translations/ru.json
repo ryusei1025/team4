@@ -93,5 +93,14 @@
     "Время работы: [Будни 8:00 - 21:00]",
     "Сб/Вс/Праздники: [9:00 - 17:00]",
     "Официальный сайт: https://www.city.sapporo.jp/seiso/kaisyu/index.html"
-  ]
+  ],
+
+  "camera_title": "AI сканер мусора",
+  "camera_guide": "Сделайте фото или выберите из галереи",
+  "camera_analyzing": "ИИ анализирует...",
+  "camera_result": "Результат",
+  "camera_confidence": "Точность",
+  "camera_btn_gallery": "Галерея",
+  "camera_btn_camera": "Камера",
+  "camera_error": "Ошибка"
 }

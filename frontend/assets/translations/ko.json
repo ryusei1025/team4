@@ -93,5 +93,14 @@
     "접수 시간 : [평일 8:00~21:00]",
     "토/일/공휴일 : [9:00~17:00]",
     "삿포로시 공식 웹사이트 : https://www.city.sapporo.jp/seiso/kaisyu/index.html"
-  ]
+  ],
+
+  "camera_title": "AI 쓰레기 분류",
+  "camera_guide": "사진을 찍거나 앨범에서 선택하세요",
+  "camera_analyzing": "AI 분석 중...",
+  "camera_result": "분석 결과",
+  "camera_confidence": "신뢰도",
+  "camera_btn_gallery": "앨범",
+  "camera_btn_camera": "촬영",
+  "camera_error": "오류"
 }

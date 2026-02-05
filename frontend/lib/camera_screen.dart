@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:shared_preferences/shared_preferences.dart'; // ★追加: 設定読み込み用
+import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
 import 'drawer_menu.dart';
 
@@ -33,11 +34,36 @@ class _CameraScreenState extends State<CameraScreen> {
   // ★追加: メニューのヘッダーに表示するための地域設定
   String _selectedArea = '中央区';
 
+  Map<String, dynamic> _trans = {};
+
   @override
   void initState() {
     super.initState();
-    _loadMenuSettings(); // ★追加: 設定を読み込む
-    _loadLanguageSetting(); // ★追加: 言語設定を読み込む
+    _loadMenuSettings();
+    _loadLanguageSetting().then((_) {
+      // 言語設定の読み込みが終わってから翻訳ファイルをロード
+      _loadTranslations();
+    });
+  }
+
+  Future<void> _loadTranslations() async {
+    try {
+      final langCode = _lang.name; // 'ja', 'en' など
+      final jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      final data = json.decode(jsonString);
+      
+      if (mounted) {
+        setState(() {
+          _trans = Map<String, dynamic>.from(data);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading translation file: $e');
+    }
+  }
+
+  String _t(String key) {
+    return _trans[key] ?? key;
   }
 
   // ★追加: メニュー表示用に保存された地域を読み込む
@@ -70,13 +96,10 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Color _getTrashColor(String type) {
-    if (type.contains('燃やせる') || type.contains('Burnable'))
-      return Colors.orange;
-    if (type.contains('燃やせない') || type.contains('Non-burnable'))
-      return Colors.blue;
+    if (type.contains('燃やせる') || type.contains('Burnable')) return Colors.orange;
+    if (type.contains('燃やせない') || type.contains('Non-burnable')) return Colors.blue;
     if (type.contains('プラ') || type.contains('Plastic')) return Colors.green;
-    if (type.contains('瓶') || type.contains('カン') || type.contains('Bottle'))
-      return Colors.brown;
+    if (type.contains('瓶') || type.contains('カン') || type.contains('Bottle')) return Colors.brown;
     return Colors.grey;
   }
 
@@ -103,26 +126,30 @@ class _CameraScreenState extends State<CameraScreen> {
         _analyzeTrash(bytes);
       }
     } catch (e) {
-      print("Error picking image: $e");
+      debugPrint("Error picking image: $e");
     }
   }
 
   Future<void> _analyzeTrash(Uint8List imageBytes) async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _trashName = null;
+      _trashType = null;
+      _trashMessage = null;
+    });
 
     try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${AppConstants.baseUrl}/api/predict_trash'),
-      );
+      var uri = Uri.parse('${AppConstants.baseUrl}/api/predict_trash');
+      var request = http.MultipartRequest('POST', uri);
 
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'image',
-          imageBytes,
-          filename: 'upload.jpg',
-        ),
-      );
+      // 画像ファイルを追加
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: 'upload.jpg',
+      ));
+
+      request.fields['lang'] = _lang.name; 
 
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
@@ -139,13 +166,13 @@ class _CameraScreenState extends State<CameraScreen> {
         });
       } else {
         setState(() {
-          _trashName = _lang == UiLang.ja ? "エラー" : "Error";
+          _trashName = _t('camera_error');
           _trashMessage = "Status: ${response.statusCode}";
         });
       }
     } catch (e) {
       setState(() {
-        _trashName = _lang == UiLang.ja ? "エラー" : "Error";
+        _trashName = _t('camera_error');
         _trashMessage = "$e";
       });
     } finally {
@@ -155,8 +182,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isJa = _lang == UiLang.ja;
-
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -167,15 +192,20 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(isJa ? 'AIゴミ判定' : 'AI Trash Scan'),
+          title: Text(_t('camera_title')), // ★JSONキー使用
           backgroundColor: Colors.transparent,
           elevation: 0,
         ),
-        // ★ 修正箇所：地域情報を渡し、言語変更コールバックを設定
         drawer: LeftMenuDrawer(
           lang: _lang,
-          selectedArea: _selectedArea, // 読み込んだ地域を渡す
-          onLangChanged: (newLang) => setState(() => _lang = newLang),
+          selectedArea: _selectedArea,
+          onLangChanged: (newLang) {
+            setState(() {
+              _lang = newLang;
+            });
+            // ★重要: 言語が変わったらファイルを読み直す
+            _loadTranslations();
+          },
         ),
         body: SingleChildScrollView(
           child: Padding(
@@ -207,9 +237,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              isJa
-                                  ? "写真を撮影または選択してください"
-                                  : "Take a photo or select from gallery",
+                              _t('camera_guide'), // ★JSONキー使用
                               style: TextStyle(color: Colors.grey[500]),
                             ),
                           ],
@@ -229,7 +257,7 @@ class _CameraScreenState extends State<CameraScreen> {
                       const CircularProgressIndicator(),
                       const SizedBox(height: 16),
                       Text(
-                        isJa ? "AIが解析中..." : "Analyzing...",
+                        _t('camera_analyzing'), // ★JSONキー使用
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -241,16 +269,12 @@ class _CameraScreenState extends State<CameraScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: _getTrashColor(
-                          _trashType ?? '',
-                        ).withOpacity(0.5),
+                        color: _getTrashColor(_trashType ?? '').withOpacity(0.5),
                         width: 2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: _getTrashColor(
-                            _trashType ?? '',
-                          ).withOpacity(0.2),
+                          color: _getTrashColor(_trashType ?? '').withOpacity(0.2),
                           blurRadius: 15,
                           offset: const Offset(0, 5),
                         ),
@@ -259,7 +283,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     child: Column(
                       children: [
                         Text(
-                          isJa ? "解析結果" : "Result",
+                          _t('camera_result'), // ★JSONキー使用
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 14,
@@ -278,9 +302,7 @@ class _CameraScreenState extends State<CameraScreen> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4, bottom: 8),
                             child: Text(
-                              isJa
-                                  ? 'AI確信度: ${(_confidence! * 100).toStringAsFixed(1)}%'
-                                  : 'Confidence: ${(_confidence! * 100).toStringAsFixed(1)}%',
+                              '${_t('camera_confidence')}: ${(_confidence! * 100).toStringAsFixed(1)}%', // ★JSONキー使用
                               style: TextStyle(
                                 color: Colors.grey[500],
                                 fontSize: 12,
@@ -338,7 +360,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.green,
                 icon: const Icon(Icons.photo_library),
-                label: Text(isJa ? "アルバム" : "Gallery"),
+                label: Text(_t('camera_btn_gallery')), // ★JSONキー使用
               ),
               const SizedBox(width: 20),
               FloatingActionButton.extended(
@@ -349,7 +371,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
                 icon: const Icon(Icons.camera_alt),
-                label: Text(isJa ? "撮影" : "Camera"),
+                label: Text(_t('camera_btn_camera')), // ★JSONキー使用
               ),
             ],
           ),

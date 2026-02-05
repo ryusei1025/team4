@@ -93,5 +93,14 @@
     "Hours : [Weekdays 8:00 - 21:00]",
     "Sat/Sun/Holidays : [9:00 - 17:00]",
     "Official Website : https://www.city.sapporo.jp/seiso/kaisyu/index.html"
-  ]
+  ],
+
+  "camera_title": "AI Trash Scan",
+  "camera_guide": "Take a photo or select from gallery",
+  "camera_analyzing": "Analyzing...",
+  "camera_result": "Result",
+  "camera_confidence": "Confidence",
+  "camera_btn_gallery": "Gallery",
+  "camera_btn_camera": "Camera",
+  "camera_error": "Error"
 }
