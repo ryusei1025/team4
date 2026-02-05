@@ -2,25 +2,28 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'drawer_menu.dart';
 import 'category_items_screen.dart';
 import 'constants.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  // 親画面から言語設定を受け取る変数
+  final UiLang initialLang;
+
+  const SearchScreen({super.key, this.initialLang = UiLang.ja});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  UiLang _lang = UiLang.ja;
+  late UiLang _lang;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  List<dynamic> _trashItems = []; // 検索結果用
-  List<dynamic> _groupedTrashList = []; // 索引リスト用
+  List<dynamic> _trashItems = [];
+  List<dynamic> _groupedTrashList = [];
   bool _isLoading = false;
   bool _hasError = false;
   Timer? _debounce;
@@ -30,26 +33,43 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    // 受け取った言語設定で初期化
+    _lang = widget.initialLang;
     _fetchDictionary();
-    _loadLanguageSetting();
+    // 念のため保存設定も確認（非同期）
+    _checkSavedLanguage();
   }
 
-  Future<void> _loadLanguageSetting() async {
-    final prefs = await SharedPreferences.getInstance(); // import 'package:shared_preferences/shared_preferences.dart'; が必要です
-    final savedLang = prefs.getString('app_lang');
-    if (savedLang != null) {
-      setState(() {
-        _lang = UiLang.values.firstWhere(
-          (e) => e.name == savedLang,
+  Future<void> _checkSavedLanguage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedLangStr = prefs.getString('app_lang');
+      if (savedLangStr != null) {
+        // 保存された文字列からUiLangを復元
+        final foundLang = UiLang.values.firstWhere(
+          (e) => e.name == savedLangStr,
           orElse: () => UiLang.ja,
         );
-      });
+        // もし初期値と違っていたら更新
+        if (mounted && _lang != foundLang) {
+          setState(() {
+            _lang = foundLang;
+          });
+          _fetchDictionary();
+        }
+      }
+    } catch (e) {
+      print("設定読み込みエラー: $e");
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  Future<void> _saveLanguageSetting(UiLang lang) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('app_lang', lang.name);
+    } catch (e) {
+      print("設定保存エラー: $e");
+    }
   }
 
   @override
@@ -68,7 +88,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      final langCode = _lang == UiLang.ja ? 'ja' : 'en';
+      final langCode = _lang.name;
       final response = await http
           .get(Uri.parse('$_baseUrl/api/trash_dictionary?lang=$langCode'))
           .timeout(const Duration(seconds: 10));
@@ -105,7 +125,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final langCode = _lang == UiLang.ja ? 'ja' : 'en';
+      final langCode = _lang.name;
       final encodedQuery = Uri.encodeComponent(query);
       final response = await http.get(
         Uri.parse('$_baseUrl/api/trash_search?q=$encodedQuery&lang=$langCode'),
@@ -137,6 +157,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _searchController.clear();
       _trashItems = [];
     });
+    _saveLanguageSetting(newLang);
     _fetchDictionary();
   }
 
@@ -155,7 +176,6 @@ class _SearchScreenState extends State<SearchScreen> {
       if (_scrollController.hasClients) {
         final maxScroll = _scrollController.position.maxScrollExtent;
         if (offset > maxScroll) offset = maxScroll;
-
         _scrollController.animateTo(
           offset,
           duration: const Duration(milliseconds: 500),
@@ -165,41 +185,100 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // ★ここを修正しました：DBの画像に合わせてIDを更新
+  // ★UI翻訳ヘルパー
+  String _getUiText(String key) {
+    // 簡易辞書
+    final Map<String, Map<String, String>> dict = {
+      'title': {'ja': '分別辞書検索', 'en': 'Dictionary', 'zh': '垃圾分类词典'},
+      'hint': {'ja': 'ゴミの名前で検索...', 'en': 'Search...', 'zh': '搜索...'},
+      'type': {'ja': 'ゴミの種類', 'en': 'Type', 'zh': '垃圾种类'},
+      'tips': {'ja': '出し方のポイント', 'en': 'Disposal Tips', 'zh': '投放要点'},
+      'none': {'ja': '特になし', 'en': 'None', 'zh': '无'},
+      'no_data': {'ja': 'データがありません', 'en': 'No Data', 'zh': '无数据'},
+      'not_found': {
+        'ja': '見つかりませんでした',
+        'en': 'No results found',
+        'zh': '未找到结果',
+      },
+      'error': {
+        'ja': 'データを取得できませんでした',
+        'en': 'Failed to load data',
+        'zh': '加载失败',
+      },
+      'retry': {'ja': '再読み込み', 'en': 'Retry', 'zh': '重试'},
+    };
+
+    String langKey = 'en';
+    if (_lang == UiLang.ja)
+      langKey = 'ja';
+    else if (_lang.name.startsWith('zh'))
+      langKey = 'zh'; // 中国語系対応
+
+    return dict[key]?[langKey] ?? dict[key]?['en'] ?? '';
+  }
+
+  // ゴミ種別のフォールバック名（サーバーデータがない場合のみ使用）
   String _getTrashTypeName(dynamic item) {
+    if (item['type'] != null && item['type'].toString().isNotEmpty) {
+      return item['type'];
+    }
+
+    // フォールバック辞書
     final id = int.tryParse(item['trash_type_id']?.toString() ?? '') ?? 0;
 
+    // 日本語
     if (_lang == UiLang.ja) {
       switch (id) {
         case 1:
           return '燃やせるごみ';
         case 2:
           return '燃やせないごみ';
-        case 3:
-          return '資源物'; // 念のため残す
         case 8:
-          return 'びん・缶・ペットボトル'; // DB画像参照
+          return 'びん・缶・ペットボトル';
         case 9:
-          return '容器包装プラスチック'; // DB画像参照
+          return '容器包装プラスチック';
         case 10:
-          return '雑がみ'; // DB画像参照
+          return '雑がみ';
         case 11:
-          return '枝・葉・草'; // DB画像参照
+          return '枝・葉・草';
         case 99:
-          return '大型ごみ'; // DB画像参照
+          return '大型ごみ';
         case 7:
-          return 'スプレー缶・電池'; // 従来通り
+          return 'スプレー缶・電池';
         default:
-          return item['trash_type'] ?? '不明';
+          return '不明';
       }
-    } else {
+    }
+    // 中国語
+    else if (_lang.name.startsWith('zh')) {
+      switch (id) {
+        case 1:
+          return '可燃垃圾';
+        case 2:
+          return '不可燃垃圾';
+        case 8:
+          return '瓶/罐/塑料瓶';
+        case 9:
+          return '塑料容器包装';
+        case 10:
+          return '杂纸';
+        case 11:
+          return '树枝/树叶/草';
+        case 99:
+          return '大件垃圾';
+        case 7:
+          return '喷雾罐/电池';
+        default:
+          return '未知';
+      }
+    }
+    // 英語（その他）
+    else {
       switch (id) {
         case 1:
           return 'Burnable Waste';
         case 2:
           return 'Non-burnable Waste';
-        case 3:
-          return 'Recyclables';
         case 8:
           return 'Bottles/Cans/PET';
         case 9:
@@ -213,7 +292,7 @@ class _SearchScreenState extends State<SearchScreen> {
         case 7:
           return 'Spray Cans/Batteries';
         default:
-          return item['trash_type_en'] ?? item['trash_type'] ?? 'Unknown';
+          return 'Unknown';
       }
     }
   }
@@ -226,15 +305,15 @@ class _SearchScreenState extends State<SearchScreen> {
       case 2:
         return Colors.blue;
       case 8:
-        return Colors.teal; // びん・缶・ペット
+        return Colors.teal;
       case 9:
-        return const Color.fromARGB(255, 23, 19, 224); // プラスチック
+        return const Color.fromARGB(255, 23, 19, 224);
       case 10:
-        return Colors.indigo; // 雑がみ
+        return Colors.indigo;
       case 11:
-        return Colors.lightGreen; // 枝・葉
+        return Colors.lightGreen;
       case 99:
-        return Colors.brown; // 大型ごみ
+        return Colors.brown;
       case 7:
         return Colors.purple;
       default:
@@ -244,10 +323,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isJa = _lang == UiLang.ja;
-    final title = isJa ? '分別辞書検索' : 'Waste Dictionary';
-    final hintText = isJa ? 'ゴミの名前で検索...' : 'Search waste name...';
-
+    // UIテキスト取得
+    final title = _getUiText('title');
+    final hintText = _getUiText('hint');
     final isSearching = _searchController.text.isNotEmpty;
 
     return Scaffold(
@@ -264,7 +342,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       drawer: LeftMenuDrawer(
         lang: _lang,
-        selectedArea: '札幌市',
+        selectedArea: '',
         onLangChanged: _onLanguageChanged,
       ),
       body: Container(
@@ -322,14 +400,14 @@ class _SearchScreenState extends State<SearchScreen> {
             const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
             const SizedBox(height: 16),
             Text(
-              _lang == UiLang.ja ? 'データを取得できませんでした' : 'Failed to load data',
+              _getUiText('error'),
               style: const TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: _fetchDictionary,
               icon: const Icon(Icons.refresh),
-              label: Text(_lang == UiLang.ja ? '再読み込み' : 'Retry'),
+              label: Text(_getUiText('retry')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -351,7 +429,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_trashItems.isEmpty) {
       return Center(
         child: Text(
-          _lang == UiLang.ja ? '見つかりませんでした' : 'No results found',
+          _getUiText('not_found'),
           style: const TextStyle(color: Colors.black54),
         ),
       );
@@ -416,7 +494,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_groupedTrashList.isEmpty) {
       return Center(
         child: Text(
-          _lang == UiLang.ja ? 'データがありません' : 'No Data',
+          _getUiText('no_data'),
           style: const TextStyle(color: Colors.black54),
         ),
       );
@@ -516,7 +594,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                _lang == UiLang.ja ? 'ゴミの種類' : 'Type',
+                _getUiText('type'), // ★翻訳対応
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 8),
@@ -536,7 +614,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           trashTypeId: tid,
                           typeName: typeName,
                           themeColor: themeColor,
-                          lang: _lang,
+                          lang: _lang, // 言語設定を引き継ぎ
                         ),
                       ),
                     );
@@ -574,7 +652,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               const Divider(height: 40),
               Text(
-                _lang == UiLang.ja ? '出し方のポイント' : 'Disposal Tips',
+                _getUiText('tips'), // ★翻訳対応
                 style: const TextStyle(
                   color: Colors.grey,
                   fontSize: 14,
@@ -583,7 +661,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                item['note'] ?? (_lang == UiLang.ja ? '特になし' : 'None'),
+                item['note'] ?? _getUiText('none'), // ★翻訳対応
                 style: const TextStyle(fontSize: 16, height: 1.6),
               ),
               const SizedBox(height: 32),
