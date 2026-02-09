@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 import os
@@ -76,10 +76,19 @@ def get_translated_value(item, field_base, lang):
 # 2. ルート設定 (Routes)
 # ------------------------------------------------------------------
 
+# @app.route('/')
+# def index():
+#     return "Banana Server is Running!"
+
+# 修正後：このコードに置き換える
 @app.route('/')
 def index():
-    return "Banana Server is Running!"
+    return send_from_directory(app.static_folder, 'index.html')
 
+# ★重要：Flutterが読み込む他のファイル（js, css, assetsなど）も通すための設定
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory(app.static_folder, path)
 
 # 機能A: カレンダー
 @app.route('/api/schedules', methods=['GET'])

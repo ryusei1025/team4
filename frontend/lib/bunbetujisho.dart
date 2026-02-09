@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'drawer_menu.dart';
 import 'category_items_screen.dart';
 import 'constants.dart';
+import 'package:flutter/services.dart';
 
 class SearchScreen extends StatefulWidget {
   // 親画面から言語設定を受け取る変数
@@ -30,6 +31,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   final String _baseUrl = AppConstants.baseUrl;
 
+  String _selectedArea = '中央区';
+
+  Map<String, dynamic> _trans = {};
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +43,54 @@ class _SearchScreenState extends State<SearchScreen> {
     _fetchDictionary();
     // 念のため保存設定も確認（非同期）
     _checkSavedLanguage();
+    _loadMenuSettings();
+    _loadLanguageSetting().then((_) {
+      // 言語設定の読み込みが終わってから翻訳ファイルをロード
+      _loadTranslations();
+    });
+  }
+
+  Future<void> _loadTranslations() async {
+    try {
+      final langCode = _lang.name; // 'ja', 'en' など
+      final jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      final data = json.decode(jsonString);
+      
+      if (mounted) {
+        setState(() {
+          _trans = Map<String, dynamic>.from(data);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading translation file: $e');
+    }
+  }
+
+  String _t(String key) {
+    return _trans[key] ?? key;
+  }
+
+  // ★追加: メニュー表示用に保存された地域を読み込む
+  Future<void> _loadMenuSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // 通知設定で保存された地域があればそれを、なければデフォルトを表示
+      _selectedArea = prefs.getString('noti_area') ?? '中央区';
+    });
+  }
+
+  // ★追加: 保存された言語を読み込む関数
+  Future<void> _loadLanguageSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedLang = prefs.getString('app_lang');
+    if (savedLang != null) {
+      setState(() {
+        _lang = UiLang.values.firstWhere(
+          (e) => e.name == savedLang,
+          orElse: () => UiLang.ja,
+        );
+      });
+    }
   }
 
   Future<void> _checkSavedLanguage() async {
@@ -324,8 +377,8 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     // UIテキスト取得
-    final title = _getUiText('title');
-    final hintText = _getUiText('hint');
+    final title = _t('dictionary'); 
+    final hintText = _t('search_hint');
     final isSearching = _searchController.text.isNotEmpty;
 
     return Scaffold(
@@ -342,7 +395,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       drawer: LeftMenuDrawer(
         lang: _lang,
-        selectedArea: '',
+        selectedArea: _selectedArea,
         onLangChanged: _onLanguageChanged,
       ),
       body: Container(

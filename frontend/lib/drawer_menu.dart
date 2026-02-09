@@ -178,13 +178,18 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     return _trans[key] ?? key;
   }
 
+  // 曜日をJSONキーから取得するように修正
   String _getWeekdayString(int weekday) {
-    if (widget.lang == UiLang.ja) {
-      const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
-      return weekdays[weekday - 1];
-    } else {
-      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return weekdays[weekday - 1];
+    // DateTime.weekday は 1=月曜日, ..., 7=日曜日 です
+    switch (weekday) {
+      case 1: return t('mon'); // JSONの "mon"
+      case 2: return t('tue');
+      case 3: return t('wed');
+      case 4: return t('thu');
+      case 5: return t('fri');
+      case 6: return t('sat');
+      case 7: return t('sun');
+      default: return '';
     }
   }
 
@@ -553,10 +558,12 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
             );
             if (scheduledDateTime.isAfter(now)) {
               final weekday = _getWeekdayString(trashDate.weekday);
-              // 通知メッセージは予約時点の言語で固定
-              final message = widget.lang == UiLang.ja
-                  ? "明日（$weekday）のゴミは$trashNameです。"
-                  : "Tomorrow($weekday) is $trashName day.";
+              
+              // ★修正: JSONからひな形を取り出し、{weekday}と{trash}を置き換える
+              String template = t('noti_msg_tomorrow'); 
+              final message = template
+                  .replaceAll('{weekday}', weekday)
+                  .replaceAll('{trash}', trashName);
 
               await NotificationService().scheduleNotification(
                 scheduledDateTime,
@@ -585,9 +592,12 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
             );
             if (scheduledDateTime.isAfter(now)) {
               final weekday = _getWeekdayString(trashDate.weekday);
-              final message = widget.lang == UiLang.ja
-                  ? "今日（$weekday）のゴミは$trashNameです。"
-                  : "Today($weekday) is $trashName day.";
+              
+              // ★修正: 当日用のひな形を使用
+              String template = t('noti_msg_today');
+              final message = template
+                  .replaceAll('{weekday}', weekday)
+                  .replaceAll('{trash}', trashName);
 
               await NotificationService().scheduleNotification(
                 scheduledDateTime,

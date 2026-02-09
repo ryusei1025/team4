@@ -38,7 +38,6 @@
   "today": "今日",
   "guide_title": "ごみの出し方ガイド",
   "guide_disclaimer": "※ 詳しくは札幌市の公式ガイドブック等をご確認ください。",
-
   "lang_ja": "日本語",
   "lang_en": "英語",
   "lang_zh": "中国語",
@@ -46,12 +45,10 @@
   "lang_ru": "ロシア語",
   "lang_vi": "ベトナム語",
   "lang_id": "インドネシア語",
-  
   "ui_weekly_schedule": "今週のスケジュール",
   "ui_important_notice": "重要なお知らせ",
   "ui_contact": "お問い合わせ",
   "ui_select_date_prompt": "日付を選択してください",
-
   "sun": "日",
   "mon": "月",
   "tue": "火",
@@ -59,7 +56,6 @@
   "thu": "木",
   "fri": "金",
   "sat": "土",
-
   "trash_burnable": "燃やせるごみ",
   "trash_spray": "スプレー缶類",
   "trash_non_burnable": "燃やせないごみ",
@@ -69,7 +65,6 @@
   "trash_plastic": "容器包装プラスチック",
   "trash_paper": "雑がみ",
   "trash_green": "枝・葉・草",
-
   "note_burnable": "・生ごみは水をよく切る\n・食用油は紙や布に染み込ませる\n・汚れた紙やおむつもこちら\n・指定袋を使用",
   "note_spray": "・穴を開けずに中身を使い切る\n・透明・半透明の袋に入れる\n・「燃やせるごみ」の日に別袋にして出す",
   "note_non_burnable": "・ガラス、陶磁器、小型家電など\n・刃物は紙に包んで「キケン」と書く\n・指定袋を使用",
@@ -79,7 +74,6 @@
   "note_plastic": "・プラマークがあるもの\n・汚れを洗い流す（落ちない場合は燃やせるごみへ）\n・二重袋にしない",
   "note_paper": "・お菓子などの紙箱、封筒、はがき、トイレットペーパーの芯など\n・紙袋に入れるか、ひもで束ねて出す",
   "note_green": "・枝は長さ50cmくらいに束ねる\n・草や葉は透明・半透明の袋に入れる\n・生ごみと混ぜない",
-
   "important_notices": [
     "ごみは収集日の朝8時30分までに出してください",
     "指定袋以外での排出は収集されません",
@@ -87,14 +81,12 @@
     "台風等の悪天候時は収集を中止する場合があります",
     "土日はごみ収集を行いません"
   ],
-
   "contact_info": [
     "札幌市コールセンター : [011-222-4894]",
     "受付時間 : [平日 8:00〜21:00]",
     "土日祝 : [9:00〜17:00]",
     "札幌市公式ウェブサイト : https://www.city.sapporo.jp/seiso/kaisyu/index.html"
   ],
-
   "camera_title": "AIゴミ判定",
   "camera_guide": "写真を撮影または選択してください",
   "camera_analyzing": "AIが解析中...",
@@ -102,5 +94,7 @@
   "camera_confidence": "AI確信度",
   "camera_btn_gallery": "アルバム",
   "camera_btn_camera": "撮影",
-  "camera_error": "エラー"
+  "camera_error": "エラー",
+  "noti_msg_tomorrow": "明日({weekday})のゴミは{trash}です。",
+  "noti_msg_today": "今日({weekday})のゴミは{trash}です。"
 }
