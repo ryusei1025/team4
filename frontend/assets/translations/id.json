@@ -7,7 +7,7 @@
   "settings_title": "Pengaturan Notifikasi",
   "settings_on_desc": "Terima notifikasi di pagi hari pengumpulan",
   "settings_off_desc": "Atur untuk mengaktifkan notifikasi",
-  "settings_edit": "Ubah Area/Waktu",
+  "settings_edit": "Pengaturan Wilayah",
   "dialog_area_title": "Pengaturan Area",
   "dialog_area_msg": "Pilih area pengumpulan sampah",
   "dialog_time_title": "Waktu Notifikasi",
@@ -95,6 +95,10 @@
   "camera_btn_gallery": "Galeri",
   "camera_btn_camera": "Kamera",
   "camera_error": "Eror",
+  "next_collection": "Hari pengumpulan berikutnya",
+  "ai_limit_title": "Batas AI Tercapai",
+  "ai_limit_msg": "Silakan cari di kamus.",
+  "btn_open_dictionary": "Buka Kamus",
   "noti_msg_tomorrow": "Besok ({weekday}) adalah hari {trash}.",
   "noti_msg_today": "Hari ini ({weekday}) adalah hari {trash}."
 }

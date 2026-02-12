@@ -7,7 +7,7 @@
   "settings_title": "Cài đặt thông báo",
   "settings_on_desc": "Nhận thông báo vào sáng ngày thu gom",
   "settings_off_desc": "Cài đặt để bật thông báo",
-  "settings_edit": "Đổi Khu vực/Giờ",
+  "settings_edit": "Cài đặt khu vực",
   "dialog_area_title": "Khu vực",
   "dialog_area_msg": "Chọn khu vực thu gom rác",
   "dialog_time_title": "Thời gian thông báo",
@@ -95,6 +95,10 @@
   "camera_btn_gallery": "Thư viện",
   "camera_btn_camera": "Máy ảnh",
   "camera_error": "Lỗi",
+  "next_collection": "Ngày thu gom tiếp theo",
+  "ai_limit_title": "Đã đạt giới hạn AI",
+  "ai_limit_msg": "Vui lòng tìm kiếm trong từ điển.",
+  "btn_open_dictionary": "Mở từ điển",
   "noti_msg_tomorrow": "Ngày mai ({weekday}) là ngày thu gom {trash}.",
   "noti_msg_today": "Hôm nay ({weekday}) là ngày thu gom {trash}."
 }

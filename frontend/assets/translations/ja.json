@@ -7,7 +7,7 @@
   "settings_title": "通知設定",
   "settings_on_desc": "収集日の朝に通知を受け取る",
   "settings_off_desc": "設定して通知をONにする",
-  "settings_edit": "地域や時間を変更",
+  "settings_edit": "地域設定",
   "dialog_area_title": "地域の設定",
   "dialog_area_msg": "ゴミ出しカレンダーの地域を選択してください",
   "dialog_time_title": "通知時刻の設定",
@@ -95,6 +95,10 @@
   "camera_btn_gallery": "アルバム",
   "camera_btn_camera": "撮影",
   "camera_error": "エラー",
+  "ai_limit_title": "AI通信制限 / エラー",
+  "ai_limit_msg": "判定できませんでした。辞書から検索してください。",
+  "btn_open_dictionary": "辞書を開く",
+  "next_collection": "次回の収集日",
   "noti_msg_tomorrow": "明日({weekday})のゴミは{trash}です。",
   "noti_msg_today": "今日({weekday})のゴミは{trash}です。"
 }

@@ -5,8 +5,12 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart'; 
+import 'package:intl/date_symbol_data_local.dart'; 
+
 import 'constants.dart';
 import 'drawer_menu.dart';
+import 'bunbetujisho.dart'; // ★検索画面への遷移に必要
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -16,42 +20,41 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  // WebではFile型が使えないため、データ(Uint8List)とXFileで管理します
-  Uint8List? _webImageBytes; // 画面表示用の画像データ
-
+  Uint8List? _webImageBytes;
   final ImagePicker _picker = ImagePicker();
 
   String? _trashName;
   String? _trashType;
   String? _trashMessage;
   double? _confidence;
+  String? _collectionSchedule; 
+
+  // ★追加: エラー時に検索ボタンを表示するためのフラグ
+  bool _showSearchButton = false;
 
   bool _isLoading = false;
 
-  // 言語設定
   UiLang _lang = UiLang.ja;
-  
-  // ★追加: メニューのヘッダーに表示するための地域設定
   String _selectedArea = '中央区';
+  int? _selectedAreaId; 
 
   Map<String, dynamic> _trans = {};
 
   @override
   void initState() {
     super.initState();
+    initializeDateFormatting(); 
     _loadMenuSettings();
     _loadLanguageSetting().then((_) {
-      // 言語設定の読み込みが終わってから翻訳ファイルをロード
       _loadTranslations();
     });
   }
 
   Future<void> _loadTranslations() async {
     try {
-      final langCode = _lang.name; // 'ja', 'en' など
+      final langCode = _lang.name;
       final jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
       final data = json.decode(jsonString);
-      
       if (mounted) {
         setState(() {
           _trans = Map<String, dynamic>.from(data);
@@ -66,16 +69,14 @@ class _CameraScreenState extends State<CameraScreen> {
     return _trans[key] ?? key;
   }
 
-  // ★追加: メニュー表示用に保存された地域を読み込む
   Future<void> _loadMenuSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // 通知設定で保存された地域があればそれを、なければデフォルトを表示
       _selectedArea = prefs.getString('noti_area') ?? '中央区';
+      _selectedAreaId = prefs.getInt('noti_area_id') ?? 1; // デフォルトを1(中央区1)にする
     });
   }
 
-  // ★追加: 保存された言語を読み込む関数
   Future<void> _loadLanguageSetting() async {
     final prefs = await SharedPreferences.getInstance();
     final savedLang = prefs.getString('app_lang');
@@ -89,18 +90,23 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // 画面遷移時に言語設定を受け取る
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
-
   Color _getTrashColor(String type) {
     if (type.contains('燃やせる') || type.contains('Burnable')) return Colors.orange;
     if (type.contains('燃やせない') || type.contains('Non-burnable')) return Colors.blue;
     if (type.contains('プラ') || type.contains('Plastic')) return Colors.green;
     if (type.contains('瓶') || type.contains('カン') || type.contains('Bottle')) return Colors.brown;
     return Colors.grey;
+  }
+
+  String _formatScheduleDate(String dateStr) {
+    try {
+      if (dateStr == "Schedule not found" || dateStr.isEmpty) return "";
+      DateTime date = DateTime.parse(dateStr);
+      String locale = _lang.name; 
+      return DateFormat.MEd(locale).format(date);
+    } catch (e) {
+      return dateStr;
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -112,17 +118,16 @@ class _CameraScreenState extends State<CameraScreen> {
       );
 
       if (image != null) {
-        // Web用にデータを読み込む
         final bytes = await image.readAsBytes();
-
         setState(() {
           _webImageBytes = bytes;
           _trashName = null;
           _trashType = null;
           _trashMessage = null;
+          _collectionSchedule = null;
+          _showSearchButton = false; // リセット
           _isLoading = true;
         });
-
         _analyzeTrash(bytes);
       }
     } catch (e) {
@@ -136,25 +141,30 @@ class _CameraScreenState extends State<CameraScreen> {
       _trashName = null;
       _trashType = null;
       _trashMessage = null;
+      _collectionSchedule = null;
+      _showSearchButton = false;
     });
 
     try {
       var uri = Uri.parse('${AppConstants.baseUrl}/api/predict_trash');
       var request = http.MultipartRequest('POST', uri);
 
-      // 画像ファイルを追加
       request.files.add(http.MultipartFile.fromBytes(
         'image',
         imageBytes,
         filename: 'upload.jpg',
       ));
 
-      request.fields['lang'] = _lang.name; 
+      request.fields['lang'] = _lang.name;
+      
+      // エリアIDを送信 (デフォルト1)
+      request.fields['area_id'] = (_selectedAreaId ?? 1).toString();
 
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
+        // 成功時
         final data = json.decode(utf8.decode(response.bodyBytes));
         setState(() {
           _trashName = data['name'];
@@ -163,16 +173,30 @@ class _CameraScreenState extends State<CameraScreen> {
           _confidence = (data['confidence'] is int)
               ? (data['confidence'] as int).toDouble()
               : data['confidence'];
+          _collectionSchedule = data['collection_schedule'];
+        });
+      } else if (response.statusCode == 503) {
+        // ★AI制限エラー時 (バックエンドが503を返す設定の場合)
+        setState(() {
+          // JSONに 'ai_limit_title' があればそれを表示、なければ英語を表示
+          String titleKey = 'ai_limit_title';
+          String msgKey = 'ai_limit_msg';
+          
+          _trashName = _t(titleKey) != titleKey ? _t(titleKey) : 'AI Limit Reached';
+          _trashMessage = _t(msgKey) != msgKey ? _t(msgKey) : 'Please search from the dictionary.';
+          
+          _showSearchButton = true; // 検索ボタンを表示
         });
       } else {
+        // その他のエラー
         setState(() {
-          _trashName = _t('camera_error');
+          _trashName = "Error";
           _trashMessage = "Status: ${response.statusCode}";
         });
       }
     } catch (e) {
       setState(() {
-        _trashName = _t('camera_error');
+        _trashName = "Connection Error";
         _trashMessage = "$e";
       });
     } finally {
@@ -180,8 +204,20 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  // 検索画面へ移動するメソッド
+  void _navigateToSearch() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SearchScreen(initialLang: _lang),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    Color themeColor = _trashType != null ? _getTrashColor(_trashType!) : Colors.green;
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -192,7 +228,7 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_t('camera_title')), // ★JSONキー使用
+          title: Text(_t('camera_title')),
           backgroundColor: Colors.transparent,
           elevation: 0,
         ),
@@ -203,7 +239,6 @@ class _CameraScreenState extends State<CameraScreen> {
             setState(() {
               _lang = newLang;
             });
-            // ★重要: 言語が変わったらファイルを読み直す
             _loadTranslations();
           },
         ),
@@ -213,6 +248,7 @@ class _CameraScreenState extends State<CameraScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // 1. 画像表示エリア
                 Container(
                   height: 300,
                   decoration: BoxDecoration(
@@ -230,117 +266,176 @@ class _CameraScreenState extends State<CameraScreen> {
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.image_search,
-                              size: 80,
-                              color: Colors.grey[300],
-                            ),
+                            Icon(Icons.image_search, size: 80, color: Colors.grey[300]),
                             const SizedBox(height: 16),
-                            Text(
-                              _t('camera_guide'), // ★JSONキー使用
-                              style: TextStyle(color: Colors.grey[500]),
-                            ),
+                            Text(_t('camera_guide'), style: TextStyle(color: Colors.grey[500])),
                           ],
                         )
                       : ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: Image.memory(
-                            _webImageBytes!,
-                            fit: BoxFit.cover,
-                          ),
+                          child: Image.memory(_webImageBytes!, fit: BoxFit.cover),
                         ),
                 ),
                 const SizedBox(height: 32),
+
+                // 2. ローディング表示
                 if (_isLoading)
                   Column(
                     children: [
                       const CircularProgressIndicator(),
                       const SizedBox(height: 16),
-                      Text(
-                        _t('camera_analyzing'), // ★JSONキー使用
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      Text(_t('camera_analyzing'), style: const TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   )
+                
+                // 3. 結果表示エリア
                 else if (_trashName != null)
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _getTrashColor(_trashType ?? '').withOpacity(0.5),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _getTrashColor(_trashType ?? '').withOpacity(0.2),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 結果カード
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _showSearchButton ? Colors.red : themeColor.withOpacity(0.5), width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_showSearchButton ? Colors.red : themeColor).withOpacity(0.2),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          _t('camera_result'), // ★JSONキー使用
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _trashName ?? '',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        if (_confidence != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4, bottom: 8),
-                            child: Text(
-                              '${_t('camera_confidence')}: ${(_confidence! * 100).toStringAsFixed(1)}%', // ★JSONキー使用
+                        child: Column(
+                          children: [
+                            Text(
+                              _showSearchButton ? "Error" : _t('camera_result'),
+                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _trashName ?? '',
                               style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 12,
+                                fontSize: 28, 
+                                fontWeight: FontWeight.bold,
+                                color: _showSearchButton ? Colors.red : Colors.black,
                               ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                        const SizedBox(height: 8),
+                            if (_confidence != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                                child: Text(
+                                  '${_t('camera_confidence')}: ${(_confidence! * 100).toStringAsFixed(1)}%',
+                                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                            
+                            // 検索ボタンがあるときはタイプを表示しない
+                            if (!_showSearchButton)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: themeColor,
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                child: Text(
+                                  _trashType ?? '',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                                ),
+                              ),
+
+                            const SizedBox(height: 16),
+                            if (_trashMessage != null)
+                              Text(
+                                _trashMessage!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey[700], height: 1.5),
+                              ),
+                            
+                            // ★追加: 検索ボタン (AI制限時)
+                            if (_showSearchButton)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 20),
+                                child: ElevatedButton.icon(
+                                  onPressed: _navigateToSearch,
+                                  icon: const Icon(Icons.search),
+                                  // ★ここも翻訳キーを使うように修正
+                                  label: Text(
+                                    _t('btn_open_dictionary') != 'btn_open_dictionary' 
+                                      ? _t('btn_open_dictionary') 
+                                      : "Open Dictionary"
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+
+                      // 次の収集日ウィジェット (成功時のみ)
+                      if (_collectionSchedule != null && _collectionSchedule!.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                           decoration: BoxDecoration(
-                            color: _getTrashColor(_trashType ?? ''),
-                            borderRadius: BorderRadius.circular(30),
+                            color: themeColor.withOpacity(0.1), 
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: themeColor.withOpacity(0.3)),
                           ),
-                          child: Text(
-                            _trashType ?? '',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                     BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)
+                                  ]
+                                ),
+                                child: Icon(Icons.calendar_month, color: themeColor, size: 30),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _t('next_collection') != 'next_collection' ? _t('next_collection') : "Next Collection", 
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _formatScheduleDate(_collectionSchedule!),
+                                      style: const TextStyle(
+                                        color: Colors.black87,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        if (_trashMessage != null)
-                          Text(
-                            _trashMessage!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              height: 1.5,
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
+
                 const SizedBox(height: 80),
               ],
             ),
@@ -354,24 +449,20 @@ class _CameraScreenState extends State<CameraScreen> {
             children: [
               FloatingActionButton.extended(
                 heroTag: 'gallery',
-                onPressed: _isLoading
-                    ? null
-                    : () => _pickImage(ImageSource.gallery),
+                onPressed: _isLoading ? null : () => _pickImage(ImageSource.gallery),
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.green,
                 icon: const Icon(Icons.photo_library),
-                label: Text(_t('camera_btn_gallery')), // ★JSONキー使用
+                label: Text(_t('camera_btn_gallery')),
               ),
               const SizedBox(width: 20),
               FloatingActionButton.extended(
                 heroTag: 'camera',
-                onPressed: _isLoading
-                    ? null
-                    : () => _pickImage(ImageSource.camera),
+                onPressed: _isLoading ? null : () => _pickImage(ImageSource.camera),
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
                 icon: const Icon(Icons.camera_alt),
-                label: Text(_t('camera_btn_camera')), // ★JSONキー使用
+                label: Text(_t('camera_btn_camera')),
               ),
             ],
           ),

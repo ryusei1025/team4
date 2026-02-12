@@ -7,7 +7,7 @@
   "settings_title": "Настройки уведомлений",
   "settings_on_desc": "Получать уведомления утром в день сбора",
   "settings_off_desc": "Включить уведомления",
-  "settings_edit": "Изменить район/время",
+  "settings_edit": "Настройки региона",
   "dialog_area_title": "Выбор района",
   "dialog_area_msg": "Выберите район сбора мусора",
   "dialog_time_title": "Время уведомления",
@@ -95,6 +95,10 @@
   "camera_btn_gallery": "Галерея",
   "camera_btn_camera": "Камера",
   "camera_error": "Ошибка",
+  "next_collection": "Следующий день сбора",
+  "ai_limit_title": "Лимит AI исчерпан",
+  "ai_limit_msg": "Пожалуйста, воспользуйтесь словарем.",
+  "btn_open_dictionary": "Открыть словарь",
   "noti_msg_tomorrow": "Завтра ({weekday}) день вывоза: {trash}.",
   "noti_msg_today": "Сегодня ({weekday}) день вывоза: {trash}."
 }

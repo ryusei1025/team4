@@ -7,7 +7,7 @@
   "settings_title": "通知设置",
   "settings_on_desc": "在收集日早上接收通知",
   "settings_off_desc": "点击开启通知",
-  "settings_edit": "更改地区/时间",
+  "settings_edit": "地区设置",
   "dialog_area_title": "地区设置",
   "dialog_area_msg": "请选择垃圾收集地区",
   "dialog_time_title": "通知时间设置",
@@ -95,6 +95,10 @@
   "camera_btn_gallery": "相册",
   "camera_btn_camera": "拍照",
   "camera_error": "错误",
+  "next_collection": "下次收集日",
+  "ai_limit_title": "AI限制已达 / 错误",
+  "ai_limit_msg": "无法判定。请从字典中搜索。",
+  "btn_open_dictionary": "打开字典",
   "noti_msg_tomorrow": "明天({weekday})是{trash}收集日。",
   "noti_msg_today": "今天({weekday})是{trash}收集日。"
 }

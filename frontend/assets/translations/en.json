@@ -7,7 +7,7 @@
   "settings_title": "Notification Settings",
   "settings_on_desc": "Receive notifications on collection mornings",
   "settings_off_desc": "Set to turn ON notifications",
-  "settings_edit": "Change Area/Time",
+  "settings_edit": "Area Settings",
   "dialog_area_title": "Area Settings",
   "dialog_area_msg": "Please select your collection area",
   "dialog_time_title": "Notification Time",
@@ -95,6 +95,10 @@
   "camera_btn_gallery": "Gallery",
   "camera_btn_camera": "Camera",
   "camera_error": "Error",
+  "ai_limit_title": "AI Limit Reached",
+  "ai_limit_msg": "Please search from the dictionary.",
+  "btn_open_dictionary": "Open Dictionary",
+  "next_collection": "Next Collection Day",
   "noti_msg_tomorrow": "Tomorrow ({weekday}) is {trash} day.",
   "noti_msg_today": "Today ({weekday}) is {trash} day."
 }
