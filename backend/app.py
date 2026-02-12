@@ -36,19 +36,32 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
 
 def get_group_header(char):
-    """ひらがなの頭文字からグループ名を返す"""
+    """
+    読み仮名の頭文字から「あ行・か行...」のグループ名を返す関数
+    """
     if not char: return "他"
-    if 'あ' <= char <= 'お': return "あ"
-    if 'か' <= char <= 'ご': return "か"
-    if 'さ' <= char <= 'ぞ': return "さ"
-    if 'た' <= char <= 'ど': return "た"
-    if 'な' <= char <= 'の': return "な"
-    if 'は' <= char <= 'ぽ': return "は"
-    if 'ま' <= char <= 'も': return "ま"
-    if 'や' <= char <= 'よ': return "や"
-    if 'ら' <= char <= 'ろ': return "ら"
-    if 'わ' <= char <= 'ん': return "わ"
+    c = char[0]
+
+    # カタカナ → ひらがな変換
+    if 'ァ' <= c <= 'ヶ':
+        c = chr(ord(c) - 0x60)
+
+    if c == 'ゔ': return 'あ'
+
+    if c < 'ぁ': return "他"
+    if c < 'か': return "あ"
+    if c < 'さ': return "か"
+    if c < 'た': return "さ"
+    if c < 'な': return "た"
+    if c < 'は': return "な"
+    if c < 'ま': return "は"
+    if c < 'や': return "ま"
+    if c < 'ら': return "や"
+    if c < 'わ': return "ら"
+    if c <= 'ん': return "わ"
+
     return "他"
+
 
 def get_translated_value(item, field_base, lang):
     """モデルのフィールドから言語に応じた値を取得するヘルパー関数"""
@@ -150,23 +163,22 @@ def get_trash_bins():
 @app.route('/api/trash_dictionary', methods=['GET'])
 def get_trash_dictionary():
     lang = request.args.get('lang', 'ja')
-    items = TrashDictionary.query.all()
+    items = TrashDictionary.query.order_by(TrashDictionary.name_kana.asc()).all()
     grouped_data = defaultdict(list)
-    
+
     for item in items:
         name_translated = get_translated_value(item, 'name', lang)
         note_translated = get_translated_value(item, 'note', lang)
-        
-        if not name_translated: continue
+
+        if not name_translated:
+            continue
 
         if lang == 'ja':
-            yomi = getattr(item, 'read', getattr(item, 'yomi', ''))
-            if not yomi: yomi = name_translated
-            header = get_group_header(yomi[0])
+            yomi = item.name_kana if item.name_kana else name_translated
+            header = get_group_header(yomi)
         else:
             first_char = name_translated[0].upper()
-            if 'A' <= first_char <= 'Z': header = first_char
-            else: header = '#'
+            header = first_char if 'A' <= first_char <= 'Z' else '#'
 
         type_name = ""
         if item.trash_type:
@@ -179,95 +191,92 @@ def get_trash_dictionary():
             "note": note_translated,
             "trash_type_id": item.trash_type_id
         }
+
         grouped_data[header].append(data)
 
     result = []
-    for header in sorted(grouped_data.keys()):
-        items_list = sorted(grouped_data[header], key=lambda x: x['name'].upper())
+    sorted_headers = sorted(grouped_data.keys())
+
+    if lang == 'ja':
+        preferred_order = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ", "他"]
+        sorted_keys = [h for h in preferred_order if h in grouped_data]
+        for k in sorted_headers:
+            if k not in sorted_keys:
+                sorted_keys.append(k)
+    else:
+        sorted_keys = sorted_headers
+
+    for header in sorted_keys:
+        items_list = grouped_data[header]
+        if lang != 'ja':
+            items_list.sort(key=lambda x: x['name'].upper())
         result.append({'header': header, 'items': items_list})
 
     return jsonify(result)
 
+
 # 機能E: 検索 (スケジュール表示対応版)
 @app.route('/api/trash_search', methods=['GET'])
 def trash_search():
-    query_str = request.args.get('q', '')
+    query_str = request.args.get('q', '').strip()
     cat_id = request.args.get('cat_id')
     lang = request.args.get('lang', 'ja')
-    area_id = request.args.get('area_id') # ★追加: エリアIDを受け取る
 
-    # data_loader を使って検索 (高速化)
-    # もし data_loader をまだ導入していない場合は、以前の TrashDictionary.query... のままでもOKですが、
-    # ここでは data_loader.get_dictionary_list() を使う例で書きます。
-    all_items = data_loader.get_dictionary_list()
-    
-    # 検索処理
-    filtered_items = []
-    search_term = query_str.lower().strip()
+    base_query = TrashDictionary.query
 
-    for item in all_items:
-        # カテゴリフィルタ
-        if cat_id and str(item.get('trash_type_id')) != str(cat_id):
-            continue
+    if cat_id:
+        base_query = base_query.filter(
+            TrashDictionary.trash_type_id == cat_id
+        )
 
-        # キーワードフィルタ
-        if search_term:
-            name_ja = item.get('name_ja', '').lower()
-            name_en = item.get('name_en', '').lower()
-            yomi = item.get('yomi', '').lower()
-            
-            # 多言語対応
-            target_col = f"name_{lang}" if lang != 'zh' else "name_zh_cn"
-            name_target = item.get(target_col, '').lower()
+    if query_str:
+        search_term = f"{query_str}%"   # ★前方一致
 
-            if (search_term in name_ja or 
-                search_term in name_en or 
-                search_term in yomi or 
-                search_term in name_target):
-                filtered_items.append(item)
-        else:
-            # 検索語がない場合は全件（または制限）
-            filtered_items.append(item)
+        filters = []
 
-    # 結果の整形とスケジュールの付与
+        if hasattr(TrashDictionary, 'name_ja'):
+            filters.append(TrashDictionary.name_ja.ilike(search_term))
+
+        if hasattr(TrashDictionary, 'name_kana'):
+            filters.append(TrashDictionary.name_kana.ilike(search_term))
+
+        target_col = f"name_{lang}"
+        if lang == 'zh':
+            target_col = "name_zh_cn"
+
+        if hasattr(TrashDictionary, target_col):
+            filters.append(getattr(TrashDictionary, target_col).ilike(search_term))
+
+        if filters:
+            base_query = base_query.filter(or_(*filters))
+
+    items = base_query.order_by(
+        TrashDictionary.name_kana.asc()
+    ).limit(50).all()
+
     result = []
-    # 数が多いと重いので最大50件に制限
-    for item in filtered_items[:50]:
-        # 名前と言語対応
-        name_col = f"name_{lang}" if lang != 'zh' else "name_zh_cn"
-        name_val = item.get(name_col) or item.get('name_en')
-        
-        note_col = f"note_{lang}" if lang == 'ja' else "note_en" # noteはja/enのみ想定
-        note_val = item.get(note_col) or item.get('note_ja')
 
-        # タイプ名
-        type_name = item.get('trash_type_str', '')
-        type_id = int(item.get('trash_type_id', 0))
+    for item in items:
+        name_val = get_translated_value(item, 'name', lang)
+        note_val = get_translated_value(item, 'note', lang)
 
-        # ★追加: スケジュール計算処理
-        schedule_date = None
-        if area_id and type_id > 0:
-            try:
-                area_id_int = int(area_id)
-                schedules = Schedule.query.filter_by(
-                    area_id=area_id_int, 
-                    trash_type_id=type_id
-                ).all()
-                if schedules:
-                    schedule_date = get_next_collection_date(schedules)
-            except:
-                pass
+        type_name = ""
+        if item.trash_type:
+            type_name = get_translated_value(item.trash_type, 'name', lang)
 
         result.append({
-            "id": item.get('id'),
+            "id": item.id,
             "name": name_val,
             "type": type_name,
             "note": note_val,
-            "trash_type_id": type_id,
-            "collection_schedule": schedule_date # ★これが入るようになります！
+            "trash_type_id": item.trash_type_id,
         })
 
+    if lang != 'ja':
+        result.sort(key=lambda x: x['name'].upper())
+
     return jsonify(result)
+
 
 
 # 機能F: AI判定 (モデル切り替え & エラーハンドリング強化版)
