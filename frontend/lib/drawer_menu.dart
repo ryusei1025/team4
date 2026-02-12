@@ -130,6 +130,29 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     '手稲区': ['手稲区1', '手稲区2', '手稲区3'],
   };
 
+  final Map<String, int> _areaIdMap = {
+    // 中央区 (ID: 1~6)
+    '中央区1': 1, '中央区2': 2, '中央区3': 3, '中央区4': 4, '中央区5': 5, '中央区6': 6,
+    // 北区 (ID: 7~12)
+    '北区1': 7, '北区2': 8, '北区3': 9, '北区4': 10, '北区5': 11, '北区6': 12,
+    // 東区 (ID: 13~18)
+    '東区1': 13, '東区2': 14, '東区3': 15, '東区4': 16, '東区5': 17, '東区6': 18,
+    // 白石区 (ID: 19~22)
+    '白石区1': 19, '白石区2': 20, '白石区3': 21, '白石区4': 22,
+    // 厚別区 (ID: 23~26)
+    '厚別区1': 23, '厚別区2': 24, '厚別区3': 25, '厚別区4': 26,
+    // 豊平区 (ID: 27~30)
+    '豊平区1': 27, '豊平区2': 28, '豊平区3': 29, '豊平区4': 30,
+    // 清田区 (ID: 31~32)
+    '清田区1': 31, '清田区2': 32,
+    // 南区 (ID: 33~39)
+    '南区1': 33, '南区2': 34, '南区3': 35, '南区4': 36, '南区5': 37, '南区6': 38, '南区7': 39,
+    // 西区 (ID: 40~43)
+    '西区1': 40, '西区2': 41, '西区3': 42, '西区4': 43,
+    // 手稲区 (ID: 44~46)
+    '手稲区1': 44, '手稲区2': 45, '手稲区3': 46,
+  };
+
   @override
   void initState() {
     super.initState();
@@ -178,13 +201,18 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
     return _trans[key] ?? key;
   }
 
+  // 曜日をJSONキーから取得するように修正
   String _getWeekdayString(int weekday) {
-    if (widget.lang == UiLang.ja) {
-      const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
-      return weekdays[weekday - 1];
-    } else {
-      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return weekdays[weekday - 1];
+    // DateTime.weekday は 1=月曜日, ..., 7=日曜日 です
+    switch (weekday) {
+      case 1: return t('mon'); // JSONの "mon"
+      case 2: return t('tue');
+      case 3: return t('wed');
+      case 4: return t('thu');
+      case 5: return t('fri');
+      case 6: return t('sat');
+      case 7: return t('sun');
+      default: return '';
     }
   }
 
@@ -222,11 +250,20 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
+
     await prefs.setBool('noti_is_on', _isNotificationOn);
     await prefs.setString('noti_ward', _targetWard);
     await prefs.setString('noti_area', _targetArea);
+
+    int? areaId = _areaIdMap[_targetArea];
+    if (areaId != null) {
+      await prefs.setInt('noti_area_id', areaId); // IDを保存
+      print("Saved Area ID: $areaId"); // 確認用
+    }
+
     await prefs.setBool('noti_day_before', _notifyDayBefore);
     await prefs.setBool('noti_day_of', _notifyDayOf);
+
     await prefs.setString(
       'noti_time_before',
       '${_timeDayBefore.hour}:${_timeDayBefore.minute}',
@@ -382,6 +419,96 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                     _showTimeSettingDialog();
                   },
                   child: Text(t('btn_next')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ★追加機能: 地域だけを変更・保存するシンプル版ダイアログ
+  void _showSimpleAreaSelectionDialog() {
+    String tempWard = _targetWard;
+    String tempArea = _targetArea;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(t('settings_edit') + ' (Area)'), // タイトル
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(t('dialog_area_msg')),
+                  const SizedBox(height: 20),
+                  // 区の選択
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: tempWard,
+                    items: _areaData.keys.map((ward) {
+                      return DropdownMenuItem(value: ward, child: Text(ward));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setStateDialog(() {
+                          tempWard = val;
+                          tempArea = _areaData[val]!.first;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  // 地区(番号)の選択
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: tempArea,
+                    items: _areaData[tempWard]!.map((area) {
+                      return DropdownMenuItem(value: area, child: Text(area));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setStateDialog(() => tempArea = val);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(t('btn_cancel')),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    // 1. 状態を更新
+                    setState(() {
+                      _targetWard = tempWard;
+                      _targetArea = tempArea;
+                    });
+
+                    // 2. 設定を保存 (通知設定用のキーと、カレンダー用のキー両方に保存しておくと安全)
+                    await _saveSettings(); 
+                    
+                    // ★念のためカレンダー画面などが使っているキーにも保存
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('selected_area_id', tempWard); // 例: 中央区
+                    await prefs.setString('selected_area_no', tempArea); // 例: 中央区1
+                    
+                    // 3. 通知がONなら、新しい地域でスケジュールを再設定する
+                    if (_isNotificationOn) {
+                      _performNotificationScheduling(); 
+                    }
+
+                    if (context.mounted) {
+                      Navigator.pop(context); // ダイアログを閉じる
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Area saved: $_targetArea')),
+                      );
+                    }
+                  },
+                  child: const Text('OK'),
                 ),
               ],
             );
@@ -553,10 +680,12 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
             );
             if (scheduledDateTime.isAfter(now)) {
               final weekday = _getWeekdayString(trashDate.weekday);
-              // 通知メッセージは予約時点の言語で固定
-              final message = widget.lang == UiLang.ja
-                  ? "明日（$weekday）のゴミは$trashNameです。"
-                  : "Tomorrow($weekday) is $trashName day.";
+              
+              // ★修正: JSONからひな形を取り出し、{weekday}と{trash}を置き換える
+              String template = t('noti_msg_tomorrow'); 
+              final message = template
+                  .replaceAll('{weekday}', weekday)
+                  .replaceAll('{trash}', trashName);
 
               await NotificationService().scheduleNotification(
                 scheduledDateTime,
@@ -585,9 +714,12 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
             );
             if (scheduledDateTime.isAfter(now)) {
               final weekday = _getWeekdayString(trashDate.weekday);
-              final message = widget.lang == UiLang.ja
-                  ? "今日（$weekday）のゴミは$trashNameです。"
-                  : "Today($weekday) is $trashName day.";
+              
+              // ★修正: 当日用のひな形を使用
+              String template = t('noti_msg_today');
+              final message = template
+                  .replaceAll('{weekday}', weekday)
+                  .replaceAll('{trash}', trashName);
 
               await NotificationService().scheduleNotification(
                 scheduledDateTime,
@@ -726,7 +858,7 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Area: ${widget.selectedArea}',
+                  'Area: $_targetArea',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],
@@ -776,6 +908,11 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                     arguments: widget.lang,
                   ),
                 ),
+                ListTile(
+                leading: const Icon(Icons.location_on),
+                title: Text(t('settings_edit')), // "設定 (Area)"
+                onTap: _showSimpleAreaSelectionDialog,
+              ),
               ],
             ),
           ),
@@ -807,25 +944,25 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   value: _isNotificationOn,
                   onChanged: _handleSwitchChange,
                 ),
-                if (_isNotificationOn)
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(
-                      Icons.settings,
-                      size: 20,
-                      color: Colors.grey,
-                    ),
-                    title: Text(
-                      t('settings_edit'),
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: Colors.grey,
-                    ),
-                    onTap: _showAreaSelectionDialog,
-                  ),
+                // if (_isNotificationOn)
+                //   ListTile(
+                //     dense: true,
+                //     leading: const Icon(
+                //       Icons.settings,
+                //       size: 20,
+                //       color: Colors.grey,
+                //     ),
+                //     title: Text(
+                //       t('settings_edit'),
+                //       style: const TextStyle(fontSize: 14, color: Colors.grey),
+                //     ),
+                //     trailing: const Icon(
+                //       Icons.arrow_forward_ios,
+                //       size: 14,
+                //       color: Colors.grey,
+                //     ),
+                //     onTap: _showAreaSelectionDialog,
+                //   ),
               ],
             ),
           ),

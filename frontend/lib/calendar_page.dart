@@ -300,6 +300,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     _updateWardFromArea();
     _loadLanguageSetting();
+    _loadAreaSelection();
 
     final now = DateTime.now();
 
@@ -395,6 +396,39 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
     } catch (e) {
       print('Error loading CSV: $e');
+    }
+  }
+
+  // ==========================================
+  // ★追加: 設定の保存と読み込み
+  // ==========================================
+
+  // 地域と番号を端末に保存する
+  Future<void> _saveAreaSelection() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('calendar_selected_ward', _selectedWard); // 区 (例: 中央区)
+    await prefs.setString('calendar_selected_area', _selectedArea); // 詳細 (例: 中央区1)
+  }
+
+  // 保存された設定を読み込む
+  Future<void> _loadAreaSelection() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedWard = prefs.getString('calendar_selected_ward');
+    final savedArea = prefs.getString('calendar_selected_area');
+
+    // 保存されたデータがあり、かつ現在のリストに存在する場合のみ反映
+    if (savedWard != null && savedArea != null) {
+      if (_areaData.containsKey(savedWard) && 
+          (_areaData[savedWard]?.contains(savedArea) ?? false)) {
+        
+        setState(() {
+          _selectedWard = savedWard;
+          _selectedArea = savedArea;
+        });
+
+        // ★重要: 地域が変わったのでCSVデータを再読み込みしてカレンダーを更新
+        _loadScheduleData();
+      }
     }
   }
 
@@ -743,6 +777,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     _selectedWard = newWard;
                     _selectedArea = _areaData[newWard]!.first;
                   });
+                  _saveAreaSelection();
+                  _loadScheduleData();
                 },
               ),
             ),
@@ -758,10 +794,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 items: _areaData[_selectedWard]!,
                 itemLabel: (v) => v.replaceFirst(_selectedWard, ''),
                 width: null,
-                onChanged: (newArea) {
+                onChanged: (String? newArea) {
+                  if (newArea == null) return;
                   setState(() {
                     _selectedArea = newArea;
                   });
+                  _saveAreaSelection();
                   _loadScheduleData();
                 },
               ),
