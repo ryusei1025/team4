@@ -5,7 +5,7 @@ from models import db, Schedule, Area, TrashBin, TrashDictionary
 import os
 from google import genai
 from PIL import Image
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 import json
 import datetime
 import random
@@ -22,7 +22,7 @@ import time
 
 load_dotenv()
 
-app = Flask(__name__, static_folder='static_web')
+app = Flask(__name__)
 app.json.ensure_ascii = False
 
 # データベース設定

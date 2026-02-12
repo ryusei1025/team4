@@ -4,12 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'trash_bin_api.dart'; // API側のTrashBinクラスを使用します
+import 'trash_bin_api.dart';
 import 'drawer_menu.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-// ★削除: ここにあった class TrashBin { ... } は削除しました。
-// trash_bin_api.dart の定義を使用することで型不一致エラーを解消します。
 
 class TrashBinMapScreen extends StatefulWidget {
   const TrashBinMapScreen({super.key});
@@ -21,7 +18,6 @@ class TrashBinMapScreen extends StatefulWidget {
 class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   GoogleMapController? _mapController;
 
-  // ★追加: 言語設定用の変数 (Undefined name '_lang' エラーの修正)
   UiLang _lang = UiLang.ja;
 
   List<TrashBin> _allBins = [];
@@ -31,7 +27,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
 
   final TextEditingController _searchController = TextEditingController();
 
-  static const LatLng _initialPosition = LatLng(43.062, 141.354); // 札幌中心
+  static const LatLng _initialPosition = LatLng(43.062, 141.354); // 札幌
 
   /// ===== 絞り込み状態 =====
   final Map<String, bool> _filters = {
@@ -49,25 +45,25 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     _loadLanguageSetting();
   }
 
-  // ★追加: 画面遷移時に引数を受け取る処理
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is UiLang) {
-      setState(() {
-        _lang = args;
-      });
+      _lang = args;
     }
   }
 
+  /// ======================
+  /// API取得（※ 起動時は表示しない）
+  /// ======================
   Future<void> _loadBins() async {
     final bins = await TrashBinApi.fetchBins();
     setState(() {
       _allBins = bins;
       _searchedBins = [];
       _filteredBins = [];
-      _markers = {};
+      _markers.clear(); // ★起動時はピン0
     });
   }
 
@@ -85,7 +81,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   }
 
   /// ======================
-  /// 地域検索
+  /// 検索
   /// ======================
   void _search(String keyword) {
     final normalized = keyword.toLowerCase().replaceAll(RegExp(r'\s+'), '');
@@ -96,10 +92,8 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
       } else {
         _searchedBins = _allBins.where((bin) {
           final name = bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-          final address = bin.address.toLowerCase().replaceAll(
-            RegExp(r'\s+'),
-            '',
-          );
+          final address =
+              bin.address.toLowerCase().replaceAll(RegExp(r'\s+'), '');
           return name.contains(normalized) || address.contains(normalized);
         }).toList();
       }
@@ -109,7 +103,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   }
 
   /// ======================
-  /// 全件表示
+  /// 全件表示（← 押した時だけピン出る）
   /// ======================
   void _showAllBins() {
     setState(() {
@@ -123,13 +117,13 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   /// 絞り込み適用
   /// ======================
   void _applyFilters() {
-    final active = _filters.entries
-        .where((e) => e.value)
-        .map((e) => e.key)
-        .toList();
+    final active =
+        _filters.entries.where((e) => e.value).map((e) => e.key).toList();
 
     setState(() {
-      if (active.isEmpty) {
+      if (_searchedBins.isEmpty) {
+        _filteredBins = [];
+      } else if (active.isEmpty) {
         _filteredBins = List.from(_searchedBins);
       } else {
         _filteredBins = _searchedBins.where((bin) {
@@ -149,7 +143,6 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     _markers = _filteredBins.map((bin) {
       return Marker(
         markerId: MarkerId(bin.id.toString()),
-        // API側の定義(lon)を使用するため、ここはエラーになりません
         position: LatLng(bin.lat, bin.lon),
         infoWindow: InfoWindow(
           title: bin.name,
@@ -189,7 +182,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   }
 
   /// ======================
-  /// 詳細 BottomSheet
+  /// 詳細BottomSheet
   /// ======================
   void _showBinSheet(TrashBin bin) {
     showModalBottomSheet(
@@ -215,14 +208,14 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
               icon: const Icon(Icons.map),
               label: const Text('Googleマップで開く'),
               onPressed: () async {
-                final query = Uri.encodeComponent('${bin.name} ${bin.address}');
-
+                final query =
+                    Uri.encodeComponent('${bin.name} ${bin.address}');
                 final uri = Uri.parse(
                   'https://www.google.com/maps/search/?api=1&query=$query',
                 );
-
                 if (await canLaunchUrl(uri)) {
-                  launchUrl(uri, mode: LaunchMode.externalApplication);
+                  launchUrl(uri,
+                      mode: LaunchMode.externalApplication);
                 }
               },
             ),
@@ -233,7 +226,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   }
 
   /// ======================
-  /// 絞り込み BottomSheet（適用ボタンあり）
+  /// 絞り込みシート
   /// ======================
   void _openFilterSheet() {
     final tempFilters = Map<String, bool>.from(_filters);
@@ -250,37 +243,24 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '絞り込み',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-
+                  const Text('絞り込み',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ...tempFilters.keys.map((key) {
                     return CheckboxListTile(
                       title: Text(key),
                       value: tempFilters[key],
-                      onChanged: (v) {
-                        setModalState(() {
-                          tempFilters[key] = v!;
-                        });
-                      },
+                      onChanged: (v) =>
+                          setModalState(() => tempFilters[key] = v!),
                     );
                   }),
-
-                  const SizedBox(height: 8),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       TextButton(
-                        onPressed: () {
-                          setModalState(() {
-                            tempFilters.updateAll((k, v) => false);
-                          });
-                        },
+                        onPressed: () => setModalState(() =>
+                            tempFilters.updateAll((k, v) => false)),
                         child: const Text('リセット'),
                       ),
                       ElevatedButton(
@@ -314,58 +294,44 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
     final isJa = _lang == UiLang.ja;
 
     return Scaffold(
-      // ★修正: isJa変数を使用してタイトルを設定 (未使用エラーの解消)
       appBar: AppBar(
         title: Text(isJa ? 'ゴミ箱マップ' : 'Trash Map'),
-        elevation: 0,
       ),
-
-      // ★修正: onLangChangedを追加 (必須パラメータエラーの解消)
       drawer: LeftMenuDrawer(
         lang: _lang,
         selectedArea: '札幌市',
-        onLangChanged: (newLang) => setState(() => _lang = newLang),
+        onLangChanged: (l) => setState(() => _lang = l),
       ),
-
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Material(
-                elevation: 2,
-                borderRadius: BorderRadius.circular(30),
-                child: TextField(
-                  controller: _searchController,
-                  onSubmitted: _search,
-                  decoration: const InputDecoration(
-                    hintText: '地域を検索',
-                    prefixIcon: Icon(Icons.search),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 14),
-                  ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              controller: _searchController,
+              onSubmitted: _search,
+              decoration: const InputDecoration(
+                hintText: '地域を検索',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(30)),
                 ),
               ),
             ),
-
-            Expanded(
-              child: GoogleMap(
-                initialCameraPosition: const CameraPosition(
-                  target: _initialPosition,
-                  zoom: 14,
-                ),
-                markers: _markers,
-                onMapCreated: (c) => _mapController = c,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: true,
+          ),
+          Expanded(
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: _initialPosition,
+                zoom: 14,
               ),
+              markers: _markers,
+              onMapCreated: (c) => _mapController = c,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
