@@ -1,7 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-// ★修正: 使われていない import 'constants.dart'; を削除しました
 
 class TrashBin {
   final int id;
@@ -33,19 +31,11 @@ class TrashBin {
 }
 
 class TrashBinApi {
-  /// 実行環境ごとにAPIのURLを切り替える
-  static String get baseUrl {
-    if (kIsWeb) {
-      // Chrome（Flutter Web）
-      return 'http://localhost:5000';
-    } else {
-      // Androidエミュレータ
-      return 'http://10.0.2.2:5000';
-    }
-  }
+    static const String baseUrl = 'https://unanimated-susannah-useably.ngrok-free.dev';
+
 
   static Future<List<TrashBin>> fetchBins() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/bins'));
+    final res = await http.get(Uri.parse('$baseUrl/api/trash_bins')); // ★app.pyのエンドポイントに合わせて修正
 
     if (res.statusCode != 200) {
       throw Exception('API error: ${res.statusCode}');

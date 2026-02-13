@@ -146,18 +146,24 @@ def get_areas():
     # 簡易的に日本語名を返す（必要に応じて多言語化）
     return jsonify([{"id": a.id, "name": a.name_ja} for a in areas])
 
-# 機能C: マップ
-@app.route('/api/trash_bins', methods=['GET'])
+@app.route('/api/trash_bins', methods=['GET']) # URLも確認！
 def get_trash_bins():
     bins = TrashBin.query.all()
-    return jsonify([{
-        "id": b.id,
-        "name": b.name,
-        "lat": b.latitude,
-        "lng": b.longitude,
-        "type": b.bin_type,
-        "address": b.address
-    } for b in bins])
+    results = []
+    for b in bins:
+        # 緯度経度がないデータは除外する安全策
+        if b.latitude is None or b.longitude is None:
+            continue
+            
+        results.append({
+            "id": b.id,
+            "name": b.name,
+            "lat": b.latitude,
+            "lon": b.longitude,
+            "type": b.bin_type,
+            "address": b.address
+        })
+    return jsonify(results)
 
 # 機能D: 分別辞書
 @app.route('/api/trash_dictionary', methods=['GET'])

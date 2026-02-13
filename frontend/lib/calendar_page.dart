@@ -734,8 +734,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
       drawer: LeftMenuDrawer(
         lang: _lang,
         selectedArea: _selectedArea,
+
         onLangChanged: (UiLang newLang) {
           _loadTranslations(newLang);
+        },
+
+        onAreaChanged: () async {
+          // 1. ドロワーを閉じる
+          Navigator.pop(context); 
+
+          // 2. 保存された新しい地域情報を読み込み直す
+          // この関数の中で setState と _loadScheduleData() が呼ばれるので、
+          // 画面は自動的に新しい地域のカレンダーに切り替わります。
+          await _loadAreaSelection(); 
         },
       ),
 

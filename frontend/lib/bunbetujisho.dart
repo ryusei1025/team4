@@ -204,14 +204,20 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  void _onLanguageChanged(UiLang newLang) {
+  void _onLanguageChanged(UiLang newLang) async { // asyncをつける
+    // 1. 設定保存
+    _saveLanguageSetting(newLang);
+
+    // 2. 状態更新と再ロード
     setState(() {
       _lang = newLang;
-      _searchController.clear();
-      _trashItems = [];
     });
-    _saveLanguageSetting(newLang);
-    _fetchDictionary();
+
+    // ★3. これを追加！翻訳ファイル（JSON）を新しい言語で読み直す
+    await _loadTranslations();
+    
+    // 4. マップのデータ等を再取得する必要があればここで行う
+    // _fetchMapData(); 
   }
 
   void _jumpToSection(String header) {
