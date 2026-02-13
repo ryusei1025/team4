@@ -100,5 +100,22 @@
   "ai_limit_msg": "판정할 수 없습니다. 사전에서 검색해 주세요.",
   "btn_open_dictionary": "사전 열기",
   "noti_msg_tomorrow": "내일({weekday})은 {trash} 수거일입니다.",
-  "noti_msg_today": "오늘({weekday})은 {trash} 수거일입니다."
+  "noti_msg_today": "오늘({weekday})은 {trash} 수거일입니다.",
+
+  "map_title": "쓰레기통 지도",
+  "btn_filter": "필터",
+  "btn_show_all": "전체 표시",
+  "filter_title": "쓰레기통 필터",
+  "filter_reset": "초기화",
+  "filter_apply": "적용",
+  "open_google_map": "Google 지도에서 열기",
+
+  "map_help_title": "이 지도에 대하여",
+  "map_help_desc_1": "여기는 \"자원 회수 거점·협력점\" 지도입니다.",
+  "map_help_desc_2": "평소 타는 쓰레기 등을 내놓는 \"길거리 쓰레기 스테이션(노란 그물망)\"은 표시되지 않습니다.",
+  "map_help_desc_3": "쇼핑하러 갈 때 건전지를 버리거나, 구청에 갈 때 소형 가전을 버리고 싶을 때 활용해 주세요.",
+  "map_help_list_title": "【주요 회수 품목】",
+  "map_help_list_items": "・고지(신문, 잡지, 골판지)\n・빈 병, 빈 캔\n・폐건전지\n・형광등\n・폐식용유\n・소형 가전(드라이어 등)",
+  "map_help_source": "데이터 출처: 삿포로시 오픈 데이터",
+  "map_help_close": "닫기"
 }

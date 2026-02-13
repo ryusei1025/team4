@@ -88,11 +88,14 @@ class LeftMenuDrawer extends StatefulWidget {
   final String selectedArea;
   final ValueChanged<UiLang> onLangChanged;
 
+  final VoidCallback? onAreaChanged;
+
   const LeftMenuDrawer({
     super.key,
     required this.lang,
     required this.selectedArea,
     required this.onLangChanged,
+    this.onAreaChanged,
   });
 
   @override
@@ -488,24 +491,17 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                       _targetArea = tempArea;
                     });
 
-                    // 2. 設定を保存 (通知設定用のキーと、カレンダー用のキー両方に保存しておくと安全)
-                    await _saveSettings(); 
+                    // 2. 設定を保存 (通知用キー + カレンダー用キー)
                     
-                    // ★念のためカレンダー画面などが使っているキーにも保存
                     final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString('selected_area_id', tempWard); // 例: 中央区
-                    await prefs.setString('selected_area_no', tempArea); // 例: 中央区1
+                    // カレンダー画面が読み込むキーに保存
+                    await prefs.setString('calendar_selected_ward', _targetWard); // 区
+                    await prefs.setString('calendar_selected_area', _targetArea); // 地区
                     
-                    // 3. 通知がONなら、新しい地域でスケジュールを再設定する
-                    if (_isNotificationOn) {
-                      _performNotificationScheduling(); 
-                    }
+                    if (mounted) {
+                      widget.onAreaChanged?.call();
 
-                    if (context.mounted) {
-                      Navigator.pop(context); // ダイアログを閉じる
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Area saved: $_targetArea')),
-                      );
+                      Navigator.pop(context);
                     }
                   },
                   child: const Text('OK'),
@@ -944,25 +940,6 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   value: _isNotificationOn,
                   onChanged: _handleSwitchChange,
                 ),
-                // if (_isNotificationOn)
-                //   ListTile(
-                //     dense: true,
-                //     leading: const Icon(
-                //       Icons.settings,
-                //       size: 20,
-                //       color: Colors.grey,
-                //     ),
-                //     title: Text(
-                //       t('settings_edit'),
-                //       style: const TextStyle(fontSize: 14, color: Colors.grey),
-                //     ),
-                //     trailing: const Icon(
-                //       Icons.arrow_forward_ios,
-                //       size: 14,
-                //       color: Colors.grey,
-                //     ),
-                //     onTap: _showAreaSelectionDialog,
-                //   ),
               ],
             ),
           ),
