@@ -53,9 +53,11 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _loadTranslations() async {
     try {
       final langCode = _lang.name; // 'ja', 'en' など
-      final jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      final jsonString = await rootBundle.loadString(
+        'assets/translations/$langCode.json',
+      );
       final data = json.decode(jsonString);
-      
+
       if (mounted) {
         setState(() {
           _trans = Map<String, dynamic>.from(data);
@@ -204,7 +206,8 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  void _onLanguageChanged(UiLang newLang) async { // asyncをつける
+  void _onLanguageChanged(UiLang newLang) async {
+    // asyncをつける
     // 1. 設定保存
     _saveLanguageSetting(newLang);
 
@@ -215,9 +218,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // ★3. これを追加！翻訳ファイル（JSON）を新しい言語で読み直す
     await _loadTranslations();
-    
+
     // 4. マップのデータ等を再取得する必要があればここで行う
-    // _fetchMapData(); 
+    // _fetchMapData();
   }
 
   void _jumpToSection(String header) {
@@ -383,7 +386,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     // UIテキスト取得
-    final title = _t('dictionary'); 
+    final title = _t('dictionary');
     final hintText = _t('search_hint');
     final isSearching = _searchController.text.isNotEmpty;
 
@@ -392,12 +395,12 @@ class _SearchScreenState extends State<SearchScreen> {
         title: Text(title),
         backgroundColor: const Color.fromARGB(
           255,
-          0,
-          221,
-          155,
+          3,
+          240,
+          169,
         ).withOpacity(0.8),
-        foregroundColor: Colors.white,
-        centerTitle: true,
+        foregroundColor: const Color.fromARGB(255, 0, 0, 0),
+        centerTitle: false,
       ),
       drawer: LeftMenuDrawer(
         lang: _lang,

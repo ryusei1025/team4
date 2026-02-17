@@ -7,7 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'trash_bin_api.dart';
-import 'drawer_menu.dart'; 
+import 'drawer_menu.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TrashBinMapScreen extends StatefulWidget {
@@ -21,7 +21,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   GoogleMapController? _mapController;
 
   UiLang _lang = UiLang.ja;
-  
+
   // 翻訳データを入れる変数
   Map<String, dynamic> _trans = {};
 
@@ -57,7 +57,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // ★修正: まだ引数から設定していない場合のみ実行する
     if (!_isInitLangFromArgs) {
       final args = ModalRoute.of(context)?.settings.arguments;
@@ -78,7 +78,9 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   Future<void> _loadTranslations() async {
     try {
       final langCode = _lang.name;
-      final jsonString = await rootBundle.loadString('assets/translations/$langCode.json');
+      final jsonString = await rootBundle.loadString(
+        'assets/translations/$langCode.json',
+      );
       final data = json.decode(jsonString);
       if (mounted) {
         setState(() {
@@ -112,21 +114,23 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
 
   // ピンの色設定（省略：変更なし）
   double _getPinColor(String type) {
-    if (type.contains('古紙') || type.contains('びん')) return BitmapDescriptor.hueGreen;
+    if (type.contains('古紙') || type.contains('びん'))
+      return BitmapDescriptor.hueGreen;
     if (type.contains('小型家電')) return BitmapDescriptor.hueBlue;
-    if (type.contains('蛍光管') || type.contains('電池')) return BitmapDescriptor.hueOrange;
+    if (type.contains('蛍光管') || type.contains('電池'))
+      return BitmapDescriptor.hueOrange;
     if (type.contains('古着')) return BitmapDescriptor.hueViolet;
     if (type.contains('油')) return BitmapDescriptor.hueYellow;
     return BitmapDescriptor.hueRed;
   }
-  
+
   // UI色設定（省略：変更なし）
   Color _getUiColor(String type) {
     if (type.contains('古紙') || type.contains('びん')) return Colors.green;
     if (type.contains('小型家電')) return Colors.blue;
     if (type.contains('蛍光管') || type.contains('電池')) return Colors.orange;
     if (type.contains('古着')) return Colors.purple;
-    if (type.contains('油')) return Colors.yellow; 
+    if (type.contains('油')) return Colors.yellow;
     return Colors.red;
   }
 
@@ -150,7 +154,10 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
       } else {
         _searchedBins = _allBins.where((bin) {
           final name = bin.name.toLowerCase().replaceAll(RegExp(r'\s+'), '');
-          final address = bin.address.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+          final address = bin.address.toLowerCase().replaceAll(
+            RegExp(r'\s+'),
+            '',
+          );
           return name.contains(normalized) || address.contains(normalized);
         }).toList();
       }
@@ -169,7 +176,10 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
 
   // 絞り込み適用（省略：変更なし）
   void _applyFilters() {
-    final active = _filters.entries.where((e) => e.value).map((e) => e.key).toList();
+    final active = _filters.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
     setState(() {
       if (_searchedBins.isEmpty) {
         _filteredBins = [];
@@ -193,10 +203,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
         position: LatLng(bin.lat, bin.lon),
         icon: BitmapDescriptor.defaultMarkerWithHue(_getPinColor(bin.type)),
         // ★ここは日本語のまま（ピンの情報）
-        infoWindow: InfoWindow(
-          title: bin.name,
-          snippet: bin.type,
-        ),
+        infoWindow: InfoWindow(title: bin.name, snippet: bin.type),
         onTap: () => _showBinSheet(bin),
       );
     }).toSet();
@@ -256,10 +263,11 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                 // api=1: API使用宣言
                 // destination: 目的地の緯度経度
                 // dir_action=navigate: ナビゲーションモード（省略可だが明示的）
-                final urlString = 'https://www.google.com/maps/dir/?api=1&destination=${bin.lat},${bin.lon}';
-    
+                final urlString =
+                    'https://www.google.com/maps/dir/?api=1&destination=${bin.lat},${bin.lon}';
+
                 final uri = Uri.parse(urlString);
-    
+
                 // URLを開く（外部アプリ起動モード）
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -292,7 +300,13 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // ★修正: タイトルを翻訳キーに
-                  Text(_t('filter_title'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    _t('filter_title'),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   ...tempFilters.keys.map((key) {
                     return CheckboxListTile(
                       title: Row(
@@ -303,7 +317,8 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                         ],
                       ),
                       value: tempFilters[key],
-                      onChanged: (v) => setModalState(() => tempFilters[key] = v!),
+                      onChanged: (v) =>
+                          setModalState(() => tempFilters[key] = v!),
                       activeColor: _getUiColor(key),
                     );
                   }),
@@ -311,9 +326,11 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       TextButton(
-                        onPressed: () => setModalState(() => tempFilters.updateAll((k, v) => false)),
+                        onPressed: () => setModalState(
+                          () => tempFilters.updateAll((k, v) => false),
+                        ),
                         // ★修正: リセットボタン
-                        child: Text(_t('filter_reset')), 
+                        child: Text(_t('filter_reset')),
                       ),
                       ElevatedButton(
                         onPressed: () {
@@ -325,7 +342,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                           Navigator.pop(context);
                         },
                         // ★修正: 適用ボタン
-                        child: Text(_t('filter_apply')), 
+                        child: Text(_t('filter_apply')),
                       ),
                     ],
                   ),
@@ -354,7 +371,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
         return Future.error('Location permissions are denied');
       }
     }
-    
+
     if (permission == LocationPermission.deniedForever) {
       return Future.error('Location permissions are permanently denied.');
     }
@@ -364,9 +381,7 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
 
     // 4. マップカメラを現在地に移動
     _mapController?.animateCamera(
-      CameraUpdate.newLatLng(
-        LatLng(position.latitude, position.longitude),
-      ),
+      CameraUpdate.newLatLng(LatLng(position.latitude, position.longitude)),
     );
   }
 
@@ -400,7 +415,10 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
                 const SizedBox(height: 12),
                 Text(
                   _t('map_help_desc_2'),
-                  style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.red[700],
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(_t('map_help_desc_3')),
@@ -430,9 +448,37 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: '札幌市',
+        onLangChanged: (newLang) async {
+          setState(() {
+            _lang = newLang;
+          });
+          await _loadTranslations();
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('app_lang', newLang.name);
+        },
+      ),
       appBar: AppBar(
-        // ★修正: .tr()を削除し、_t()のみを使用
-        title: Text(_t("map_title")), 
+        centerTitle: false,
+        titleSpacing: 0,
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: const Icon(Icons.menu),
+            color: Colors.white,
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
+        ),
+        backgroundColor: const Color.fromARGB(255, 3, 250, 150),
+        elevation: 4,
+        shape: const Border(
+          bottom: BorderSide(color: Colors.black12, width: 0.7),
+        ),
+        title: Text(
+          _t("map_title"),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
@@ -441,58 +487,54 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
           ),
         ],
       ),
-      drawer: LeftMenuDrawer(
-        lang: _lang,
-        selectedArea: '札幌市',
-        onLangChanged: (newLang) async { // ★asyncにする
-          // 1. 画面の言語更新
-          setState(() {
-            _lang = newLang;
-          });
-    
-          // 2. 翻訳ファイル再読み込み
-          await _loadTranslations();
-    
-          // 3. ★追加: 設定を保存しないと次回起動時に戻ってしまう
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('app_lang', newLang.name);
-        },
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _searchController,
-              onSubmitted: _search,
-              decoration: InputDecoration(
-                hintText: _t('search_hint'), // ここはOK
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(30)),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+          ),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _searchController,
+                onSubmitted: _search,
+                decoration: InputDecoration(
+                  hintText: _t('search_hint'),
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(30)),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.9),
                 ),
-                filled: true,
-                fillColor: Colors.white,
               ),
             ),
-          ),
-          Expanded(
-            child: GoogleMap(
-              initialCameraPosition: const CameraPosition(
-                target: _initialPosition,
-                zoom: 14,
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(30),
+                ),
+                child: GoogleMap(
+                  initialCameraPosition: const CameraPosition(
+                    target: _initialPosition,
+                    zoom: 14,
+                  ),
+                  markers: _markers,
+                  onMapCreated: (c) {
+                    _mapController = c;
+                    _getCurrentLocation();
+                  },
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                ),
               ),
-              markers: _markers,
-              onMapCreated: (c) {
-                _mapController = c;
-                _getCurrentLocation(); // ここで呼び出す
-              },
-              myLocationEnabled: true,       // 青い点を表示（権限があれば出る）
-              myLocationButtonEnabled: true, // 現在地に戻るボタンを表示
-              padding: const EdgeInsets.only(bottom: 20),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       floatingActionButton: Column(
@@ -502,10 +544,13 @@ class _TrashBinMapScreenState extends State<TrashBinMapScreen> {
           FloatingActionButton.extended(
             heroTag: 'filter',
             onPressed: _openFilterSheet,
-            backgroundColor: Colors.white,
+            backgroundColor: const Color(0xFFC8E6C9),
             icon: const Icon(Icons.tune, color: Colors.black87),
             // ★修正: ハードコーディングされていた「絞り込み」を翻訳キーに
-            label: Text(_t('btn_filter'), style: const TextStyle(color: Colors.black87)),
+            label: Text(
+              _t('btn_filter'),
+              style: const TextStyle(color: Colors.black87),
+            ),
           ),
           const SizedBox(height: 12),
           FloatingActionButton.extended(

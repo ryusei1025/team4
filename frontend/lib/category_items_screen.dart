@@ -8,14 +8,14 @@ class CategoryItemsScreen extends StatefulWidget {
   final int trashTypeId;
   final String typeName;
   final Color themeColor;
-  final UiLang lang; // 言語設定を受け取る
+  final UiLang lang;
 
   const CategoryItemsScreen({
     super.key,
     required this.trashTypeId,
     required this.typeName,
     required this.themeColor,
-    this.lang = UiLang.ja, // デフォルトは日本語
+    this.lang = UiLang.ja,
   });
 
   @override
@@ -23,164 +23,173 @@ class CategoryItemsScreen extends StatefulWidget {
 }
 
 class _CategoryItemsScreenState extends State<CategoryItemsScreen> {
-  // リストデータ
   List<dynamic> _items = [];
-
-  // ロード状態とエラーメッセージ
   bool _isLoading = true;
   String _errorMessage = '';
-
-  // APIのベースURL
   final String _baseUrl = AppConstants.baseUrl;
 
   @override
   void initState() {
     super.initState();
-    // 画面表示時にデータを取得
     _fetchCategoryItems();
   }
 
-  // APIからデータを取得するメソッド
   Future<void> _fetchCategoryItems() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
-
     try {
-      // ★修正: 言語設定に基づいてパラメータを設定 (ja / en 等)
-      // enumの名前をそのままAPIパラメータとして使用します
-      final langCode = widget.lang.name;
-
-      // APIエンドポイントの構築
+      final langCode = widget.lang == UiLang.ja ? 'ja' : 'en';
       final url =
           '$_baseUrl/api/trash_search?cat_id=${widget.trashTypeId}&lang=$langCode';
 
-      print('Fetching URL: $url'); // デバッグ用ログ
-
-      final response = await http.get(Uri.parse(url));
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        // ★修正: 日本語が文字化けしないように utf8.decode を明示的に使用
-        final String responseBody = utf8.decode(response.bodyBytes);
-        final List<dynamic> data = json.decode(responseBody);
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
 
+        // ★ 修正：勝手なソート処理を削除しました。
+        // サーバーから「あかさたな順」で送られてくるデータをそのまま使います。
+
+        if (mounted) {
+          setState(() {
+            _items = data;
+            _isLoading = false;
+          });
+        }
+      } else {
         setState(() {
-          _items = data;
+          _errorMessage = widget.lang == UiLang.ja
+              ? 'データの読み込みに失敗しました'
+              : 'Failed to load data';
           _isLoading = false;
         });
-      } else {
-        throw Exception('Failed to load items: Status ${response.statusCode}');
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-        _isLoading = false;
-      });
-      print('Error fetching category items: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = widget.lang == UiLang.ja
+              ? '通信エラーが発生しました'
+              : 'Connection error';
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 現在の言語設定を取得
     final isJa = widget.lang == UiLang.ja;
-
-    // 言語に応じたテキストの定義
-    final backButtonText = isJa ? '戻る' : 'Back';
-    final noNotesText = isJa ? '特になし' : 'None';
-    final noItemsText = isJa ? '項目が見つかりません' : 'No items found';
+    final titleText = isJa
+        ? '${widget.typeName} の一覧'
+        : 'List of ${widget.typeName}';
+    final noNotesText = isJa ? '特になし' : '-';
+    final backButtonText = isJa ? '分別辞書に戻る' : 'Back to Dictionary';
+    final retryText = isJa ? '再読み込み' : 'Retry';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.typeName),
+        title: Text(titleText),
         backgroundColor: widget.themeColor,
         foregroundColor: Colors.white,
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: widget.themeColor))
-          : _errorMessage.isNotEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  _errorMessage,
-                  style: const TextStyle(color: Colors.red),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
-          : Column(
-              children: [
-                // リスト表示部分
-                Expanded(
-                  child: _items.isEmpty
-                      ? Center(
-                          child: Text(
-                            noItemsText,
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+          ),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: _isLoading
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: widget.themeColor,
+                      ),
+                    )
+                  : _errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_errorMessage),
+                          const SizedBox(height: 10),
+                          ElevatedButton(
+                            onPressed: _fetchCategoryItems,
+                            child: Text(retryText),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(top: 10, bottom: 80),
+                      itemCount: _items.length,
+                      itemBuilder: (context, index) {
+                        final item = _items[index];
+                        return Card(
+                          color: Colors.white.withOpacity(0.85),
+                          elevation: 0.5,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            title: Text(
+                              item['name'] ?? '',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              item['note'] ?? noNotesText,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13),
                             ),
                           ),
-                        )
-                      : ListView.separated(
-                          itemCount: _items.length,
-                          separatorBuilder: (context, index) => const Divider(),
-                          itemBuilder: (context, index) {
-                            final item = _items[index];
-                            return ListTile(
-                              title: Text(
-                                item['name'],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              subtitle: Text(
-                                item['note'] ?? noNotesText,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              // 必要であればここに詳細モーダルへのonTapを追加可能
-                              onTap: () {
-                                // タップ時の処理（将来的な拡張用）
-                              },
-                            );
-                          },
-                        ),
-                ),
+                        );
+                      },
+                    ),
+            ),
 
-                // 下部の「戻る」ボタンエリア
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 55, // 元のボタンの高さを維持
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back),
-                      label: Text(
-                        backButtonText,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: widget.themeColor,
-                        foregroundColor: Colors.white,
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back),
+                  label: Text(
+                    backButtonText,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.themeColor,
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

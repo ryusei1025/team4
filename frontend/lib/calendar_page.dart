@@ -406,8 +406,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
   // 地域と番号を端末に保存する
   Future<void> _saveAreaSelection() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('calendar_selected_ward', _selectedWard); // 区 (例: 中央区)
-    await prefs.setString('calendar_selected_area', _selectedArea); // 詳細 (例: 中央区1)
+    await prefs.setString(
+      'calendar_selected_ward',
+      _selectedWard,
+    ); // 区 (例: 中央区)
+    await prefs.setString(
+      'calendar_selected_area',
+      _selectedArea,
+    ); // 詳細 (例: 中央区1)
   }
 
   // 保存された設定を読み込む
@@ -418,9 +424,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     // 保存されたデータがあり、かつ現在のリストに存在する場合のみ反映
     if (savedWard != null && savedArea != null) {
-      if (_areaData.containsKey(savedWard) && 
+      if (_areaData.containsKey(savedWard) &&
           (_areaData[savedWard]?.contains(savedArea) ?? false)) {
-        
         setState(() {
           _selectedWard = savedWard;
           _selectedArea = savedArea;
@@ -579,16 +584,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
   /// 選択中の地域名から、対応する地図画像のパスを返す
   String _getAreaMapAssetPath(String areaName) {
     // プレフィックス（前方一致）で判定します
-    if (areaName.startsWith('中央区')) return 'assets/images/01_chuo_area_map_1.gif';
-    if (areaName.startsWith('北区')) return 'assets/images/02_kita_area_map_1.gif';
-    if (areaName.startsWith('東区')) return 'assets/images/03_higashi_area_map_1.gif';
-    if (areaName.startsWith('白石区')) return 'assets/images/04_shiroishi_area_map_1.gif';
-    if (areaName.startsWith('厚別区')) return 'assets/images/05_atsubetsu_area_map_1.gif';
-    if (areaName.startsWith('豊平区')) return 'assets/images/06_toyohira_area_map_1.gif';
-    if (areaName.startsWith('清田区')) return 'assets/images/07_kiyota_area_map_1.gif';
-    if (areaName.startsWith('南区')) return 'assets/images/08_minami_area_map_2.gif';
-    if (areaName.startsWith('西区')) return 'assets/images/09_nishi_area_map_1.gif';
-    if (areaName.startsWith('手稲区')) return 'assets/images/10_teine_area_map_1.gif';
+    if (areaName.startsWith('中央区'))
+      return 'assets/images/01_chuo_area_map_1.gif';
+    if (areaName.startsWith('北区'))
+      return 'assets/images/02_kita_area_map_1.gif';
+    if (areaName.startsWith('東区'))
+      return 'assets/images/03_higashi_area_map_1.gif';
+    if (areaName.startsWith('白石区'))
+      return 'assets/images/04_shiroishi_area_map_1.gif';
+    if (areaName.startsWith('厚別区'))
+      return 'assets/images/05_atsubetsu_area_map_1.gif';
+    if (areaName.startsWith('豊平区'))
+      return 'assets/images/06_toyohira_area_map_1.gif';
+    if (areaName.startsWith('清田区'))
+      return 'assets/images/07_kiyota_area_map_1.gif';
+    if (areaName.startsWith('南区'))
+      return 'assets/images/08_minami_area_map_2.gif';
+    if (areaName.startsWith('西区'))
+      return 'assets/images/09_nishi_area_map_1.gif';
+    if (areaName.startsWith('手稲区'))
+      return 'assets/images/10_teine_area_map_1.gif';
 
     return ''; // 画像がない場合
   }
@@ -597,7 +612,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _showAreaMapDialog() {
     // 1. 現在選択中のエリア（例："中央区1"）から、区の名前（例："中央区"）を取り出して初期値にする
     String currentViewArea = _selectedArea.replaceAll(RegExp(r'[0-9]'), '');
-    
+
     // 万が一リストにない名前だった場合の安全策
     if (!_areaData.containsKey(currentViewArea)) {
       currentViewArea = _areaData.keys.first; // リストの最初（中央区）にする
@@ -609,7 +624,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         // ★重要: ダイアログの中で画面を書き換えるために StatefulBuilder を使う
         return StatefulBuilder(
           builder: (context, setStateInDialog) {
-            
             // 選択された区に対応する画像パスを取得
             final path = _getAreaMapAssetPath(currentViewArea);
 
@@ -624,7 +638,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     // --- ヘッダー（ドロップダウンと閉じるボタン） ---
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -634,7 +651,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
                                   value: currentViewArea,
-                                  icon: const Icon(Icons.arrow_drop_down, color: Colors.green),
+                                  icon: const Icon(
+                                    Icons.arrow_drop_down,
+                                    color: Colors.green,
+                                  ),
                                   style: const TextStyle(
                                     color: Colors.black,
                                     fontWeight: FontWeight.bold,
@@ -649,12 +669,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                     }
                                   },
                                   // _areaDataのキー（区の名前一覧）からリストを作る
-                                  items: _areaData.keys.map<DropdownMenuItem<String>>((String value) {
-                                    return DropdownMenuItem<String>(
-                                      value: value,
-                                      child: Text(value),
-                                    );
-                                  }).toList(),
+                                  items: _areaData.keys
+                                      .map<DropdownMenuItem<String>>((
+                                        String value,
+                                      ) {
+                                        return DropdownMenuItem<String>(
+                                          value: value,
+                                          child: Text(value),
+                                        );
+                                      })
+                                      .toList(),
                                 ),
                               ),
                               const Text(
@@ -666,7 +690,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               ),
                             ],
                           ),
-                          
+
                           // 閉じるボタン
                           IconButton(
                             icon: const Icon(Icons.close),
@@ -675,7 +699,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ],
                       ),
                     ),
-                    
+
                     // --- 画像表示エリア（拡大縮小対応） ---
                     Flexible(
                       child: Container(
@@ -741,12 +765,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
         onAreaChanged: () async {
           // 1. ドロワーを閉じる
-          Navigator.pop(context); 
+          Navigator.pop(context);
 
           // 2. 保存された新しい地域情報を読み込み直す
           // この関数の中で setState と _loadScheduleData() が呼ばれるので、
           // 画面は自動的に新しい地域のカレンダーに切り替わります。
-          await _loadAreaSelection(); 
+          await _loadAreaSelection();
         },
       ),
 
@@ -757,8 +781,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         backgroundColor: const Color.fromARGB(
           255,
           0,
-          221,
-          192,
+          255,
+          170,
         ).withOpacity(0.8),
         leading: Builder(
           builder: (ctx) => IconButton(
