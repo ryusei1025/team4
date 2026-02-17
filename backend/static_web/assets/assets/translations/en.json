@@ -7,7 +7,7 @@
   "settings_title": "Notification Settings",
   "settings_on_desc": "Receive notifications on collection mornings",
   "settings_off_desc": "Set to turn ON notifications",
-  "settings_edit": "Change Area/Time",
+  "settings_edit": "Area Settings",
   "dialog_area_title": "Area Settings",
   "dialog_area_msg": "Please select your collection area",
   "dialog_time_title": "Notification Time",
@@ -100,5 +100,22 @@
   "btn_open_dictionary": "Open Dictionary",
   "next_collection": "Next Collection Day",
   "noti_msg_tomorrow": "Tomorrow ({weekday}) is {trash} day.",
-  "noti_msg_today": "Today ({weekday}) is {trash} day."
+  "noti_msg_today": "Today ({weekday}) is {trash} day.",
+
+  "map_title": "Trash Bin Map",
+  "btn_filter": "Filter",
+  "btn_show_all": "Show All",
+  "filter_title": "Filter Bins",
+  "filter_reset": "Reset",
+  "filter_apply": "Apply",
+  "open_google_map": "Open in Google Maps",
+
+  "map_help_title": "About this Map",
+  "map_help_desc_1": "This map shows \"Resource Recovery Bases\" and \"Cooperating Stores\".",
+  "map_help_desc_2": "Regular neighborhood trash stations (yellow nets) are NOT shown here.",
+  "map_help_desc_3": "Use this map to find places to drop off recyclables like batteries or small electronics while shopping.",
+  "map_help_list_title": "[Items Accepted]",
+  "map_help_list_items": "・Paper (Newspaper, Cardboard)\n・Empty Bottles / Cans\n・Used Batteries\n・Fluorescent Lights\n・Used Cooking Oil\n・Small Electronics",
+  "map_help_source": "Data Source: Sapporo City Open Data",
+  "map_help_close": "Close"
 }

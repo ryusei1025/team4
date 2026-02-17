@@ -7,7 +7,7 @@
   "settings_title": "Pengaturan Notifikasi",
   "settings_on_desc": "Terima notifikasi di pagi hari pengumpulan",
   "settings_off_desc": "Atur untuk mengaktifkan notifikasi",
-  "settings_edit": "Ubah Area/Waktu",
+  "settings_edit": "Pengaturan Wilayah",
   "dialog_area_title": "Pengaturan Area",
   "dialog_area_msg": "Pilih area pengumpulan sampah",
   "dialog_time_title": "Waktu Notifikasi",
@@ -100,5 +100,22 @@
   "ai_limit_msg": "Silakan cari di kamus.",
   "btn_open_dictionary": "Buka Kamus",
   "noti_msg_tomorrow": "Besok ({weekday}) adalah hari {trash}.",
-  "noti_msg_today": "Hari ini ({weekday}) adalah hari {trash}."
+  "noti_msg_today": "Hari ini ({weekday}) adalah hari {trash}.",
+
+  "map_title": "Peta Tempat Sampah",
+  "btn_filter": "Filter",
+  "btn_show_all": "Tampilkan Semua",
+  "filter_title": "Filter Tempat Sampah",
+  "filter_reset": "Atur Ulang",
+  "filter_apply": "Terapkan",
+  "open_google_map": "Buka di Google Maps",
+
+  "map_help_title": "Tentang Peta Ini",
+  "map_help_desc_1": "Peta ini menunjukkan lokasi \"Pangkalan Daur Ulang\".",
+  "map_help_desc_2": "Tempat sampah biasa (jaring kuning) TIDAK ditampilkan di sini.",
+  "map_help_desc_3": "Gunakan peta ini untuk membuang baterai atau elektronik kecil saat berbelanja.",
+  "map_help_list_title": "[Barang yang Diterima]",
+  "map_help_list_items": "・Kertas bekas (Koran, Kardus)\n・Botol / Kaleng kosong\n・Baterai bekas\n・Lampu neon\n・Minyak goreng bekas\n・Elektronik kecil",
+  "map_help_source": "Sumber Data: Data Terbuka Kota Sapporo",
+  "map_help_close": "Tutup"
 }

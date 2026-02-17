@@ -34,9 +34,11 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // ★この1行を追加！デバッグ用の鍵で署名して、インストールできるようにします
             signingConfig = signingConfigs.getByName("debug")
+
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
         }
     }
 }
