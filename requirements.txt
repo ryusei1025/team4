@@ -22,7 +22,7 @@ google-auth==2.48.0
 google-auth-httplib2==0.2.1
 google-genai
 googleapis-common-protos==1.72.0
-greenlet==3.3.0
+greenlet
 grpcio==1.76.0
 grpcio-status==1.71.2
 gunicorn==25.1.0
