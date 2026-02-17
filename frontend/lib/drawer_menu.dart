@@ -491,20 +491,37 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                       _targetArea = tempArea;
                     });
 
-                    // 2. 設定を保存 (通知用キー + カレンダー用キー)
-                    
-                    final prefs = await SharedPreferences.getInstance();
-                    // カレンダー画面が読み込むキーに保存
-                    await prefs.setString('calendar_selected_ward', _targetWard); // 区
-                    await prefs.setString('calendar_selected_area', _targetArea); // 地区
-                    
-                    if (mounted) {
-                      widget.onAreaChanged?.call();
+                    // 2. 設定をSharedPreferencesに保存（通知用キー）
+                    // ※ここで "Saved Area ID: ..." のログが出ているはずです
+                    await _saveSettings();
 
-                      Navigator.pop(context);
+                    // 3. 設定をSharedPreferencesに保存（カレンダー画面用キー）
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('calendar_selected_ward', tempWard);
+                    await prefs.setString('calendar_selected_area', tempArea);
+
+                    // ★修正ポイント: 通知がONなら、明示的にスケジュール再登録を呼び出す
+                    // ここでデバッグ用のprintを入れると分かりやすいです
+                    debugPrint("Check Reschedule: IsNotificationOn = $_isNotificationOn");
+
+                    if (_isNotificationOn) {
+                      debugPrint("Executing Reschedule for $_targetArea...");
+                      
+                      // ★この行が抜けているか、条件に入っていない可能性があります
+                      await _performNotificationScheduling(); 
+                    }
+
+                    // 4. 親画面（カレンダー）に変更を通知してダイアログを閉じる
+                    if (context.mounted) {
+                      widget.onAreaChanged?.call(); // カレンダー更新
+                      Navigator.pop(context); // ダイアログ閉じる
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${t('msg_saved')}: $_targetArea')),
+                      );
                     }
                   },
-                  child: const Text('OK'),
+                  child: Text(t('btn_done')), // 「完了」または「OK」
                 ),
               ],
             );
@@ -940,6 +957,24 @@ class _LeftMenuDrawerState extends State<LeftMenuDrawer> {
                   value: _isNotificationOn,
                   onChanged: _handleSwitchChange,
                 ),
+
+                // ★追加: 通知がONの場合のみ、時間設定変更ボタンを表示
+                if (_isNotificationOn) ...[
+                  const Divider(height: 1, indent: 60, endIndent: 16), // 区切り線
+                  ListTile(
+                    contentPadding: const EdgeInsets.only(left: 16, right: 16),
+                    leading: const Icon(Icons.access_time, color: Colors.teal),
+                    title: Text(
+                      t('dialog_time_title'), // "時間設定" (既存のキーを再利用)
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    trailing: const Icon(Icons.edit, size: 20, color: Colors.grey),
+                    onTap: () {
+                      // 時間設定ダイアログを直接開く
+                      _showTimeSettingDialog();
+                    },
+                  ),
+                ],
               ],
             ),
           ),
