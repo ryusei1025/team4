@@ -7,7 +7,7 @@
   "settings_title": "Cài đặt thông báo",
   "settings_on_desc": "Nhận thông báo vào sáng ngày thu gom",
   "settings_off_desc": "Cài đặt để bật thông báo",
-  "settings_edit": "Đổi Khu vực/Giờ",
+  "settings_edit": "Cài đặt khu vực",
   "dialog_area_title": "Khu vực",
   "dialog_area_msg": "Chọn khu vực thu gom rác",
   "dialog_time_title": "Thời gian thông báo",
@@ -100,5 +100,22 @@
   "ai_limit_msg": "Vui lòng tìm kiếm trong từ điển.",
   "btn_open_dictionary": "Mở từ điển",
   "noti_msg_tomorrow": "Ngày mai ({weekday}) là ngày thu gom {trash}.",
-  "noti_msg_today": "Hôm nay ({weekday}) là ngày thu gom {trash}."
+  "noti_msg_today": "Hôm nay ({weekday}) là ngày thu gom {trash}.",
+
+  "map_title": "Bản đồ thùng rác",
+  "btn_filter": "Bộ lọc",
+  "btn_show_all": "Hiển thị tất cả",
+  "filter_title": "Lọc thùng rác",
+  "filter_reset": "Đặt lại",
+  "filter_apply": "Áp dụng",
+  "open_google_map": "Mở trong Google Maps",
+
+  "map_help_title": "Về bản đồ này",
+  "map_help_desc_1": "Bản đồ này hiển thị các \"Điểm thu hồi tài nguyên\".",
+  "map_help_desc_2": "Các trạm rác thông thường (lưới màu vàng) KHÔNG được hiển thị ở đây.",
+  "map_help_desc_3": "Hãy sử dụng bản đồ này để tìm nơi vứt pin hoặc đồ điện tử nhỏ khi đi mua sắm.",
+  "map_help_list_title": "[Các mục được chấp nhận]",
+  "map_help_list_items": "・Giấy cũ (báo, tạp chí)\n・Chai lọ, lon rỗng\n・Pin đã qua sử dụng\n・Đèn huỳnh quang\n・Dầu ăn đã qua sử dụng\n・Đồ điện tử nhỏ",
+  "map_help_source": "Nguồn dữ liệu: Dữ liệu mở TP Sapporo",
+  "map_help_close": "Đóng"
 }

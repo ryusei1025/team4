@@ -22,7 +22,19 @@ import time
 
 load_dotenv()
 
-app = Flask(__name__)
+# 現在のファイル(app.py)がある場所を基準に static_web のパスを指定
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static_web')
+
+if os.path.exists(STATIC_DIR):
+    print(f"OK: Static folder found at {STATIC_DIR}")
+    print(f"Files: {os.listdir(STATIC_DIR)}") # 中身を表示
+else:
+    print(f"ERROR: Static folder NOT found at {STATIC_DIR}")
+
+# static_folderを指定してFlaskを起動
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
+
 app.json.ensure_ascii = False
 
 # データベース設定
@@ -111,7 +123,13 @@ def index():
 
 @app.route('/<path:path>')
 def serve_static(path):
-    return send_from_directory(app.static_folder, path)
+    # ファイルが実際に存在するか確認
+    full_path = os.path.join(app.static_folder, path)
+    if os.path.exists(full_path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        # 存在しない場合は index.html を返す（Flutterの画面遷移対策）
+        return send_from_directory(app.static_folder, 'index.html')
 
 # 機能A: カレンダー
 @app.route('/api/schedules', methods=['GET'])
@@ -285,7 +303,7 @@ def trash_search():
 
 
 
-# 機能F: AI判定 (モデル切り替え & エラーハンドリング強化版)
+# 機能F: AI判定 (モデル切り替え & プロンプト強化版)
 @app.route('/api/predict_trash', methods=['POST'])
 def predict_trash():
     if 'image' not in request.files:
@@ -302,61 +320,89 @@ def predict_trash():
         return jsonify({"error": "Invalid image file"}), 400
 
     # ---------------------------------------------------------
-    # 2. Gemini AI による解析 (粘り強いリトライ版)
+    # 2. Gemini AI による解析
     # ---------------------------------------------------------
     
-    # ★修正: 成功実績のある "latest" 系だけを使う
     models_to_try = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"]
     
     ai_result = {}
     success_model = None
     last_error = None
     
-    lang_map = { 'ja': 'Japanese', 'en': 'English', 'zh': 'Simplified Chinese', 'ko': 'Korean', 'vi': 'Vietnamese' }
+    # 言語設定のマッピング
+    lang_map = { 
+        'ja': 'Japanese', 
+        'en': 'English', 
+        'zh': 'Simplified Chinese', 
+        'ko': 'Korean', 
+        'vi': 'Vietnamese',
+        'ru': 'Russian',
+        'id': 'Indonesian',
+    }
     target_language = lang_map.get(user_lang, 'Japanese')
 
+    # ★修正: プロンプトを強化して、指定言語での出力を強制する
     prompt = f"""
-    Analyze this image and identify the trash item.
-    Task 1: Identify the object name specifically.
-    Task 2: Classify into: 1.Burnable, 2.Non-burnable, 3.Bottles/Cans/PET, 4.Plastic Containers, 5.Mixed Paper, 6.Branches/Leaves.
-    Task 3: Reason.
-    Return ONLY JSON:
-    {{ "identified_name_ja": "...", "identified_name_en": "...", "ai_type_id": "1-6", "ai_type_name": "...", "ai_reason": "..." }}
+    Analyze this image and identify the trash item for waste sorting in Sapporo, Japan.
+    
+    Target Language: {target_language} (All text values MUST be in this language)
+
+    Task 1: Identify the object name specifically in {target_language}.
+    Task 2: Classify into one of these types: 
+        - Burnable (燃やせるゴミ)
+        - Spray Can (スプレー缶)
+        - Non-burnable (燃やせないゴミ)
+        - Lighter (ライター)
+        - Bottle/Cans/PET (びん・缶・ペットボトル)
+        - Battery (電池)
+        - Plastic Containers (容器包装プラスチック)
+        - Mixed Paper (雑がみ)
+        - Branches/Leaves (枝・葉・草)
+        - Oversized (大型ごみ)
+    Task 3: Provide a short reason for the classification in {target_language}.
+
+    Return ONLY a valid JSON object with these exact keys:
+    {{
+      "identified_name": "Name of the object in {target_language}",
+      "type_id": "Integer from 1 to 7 (1:Burnable, 2:Non-burnable, 3:Bottles/Cans/PET, 4:Plastic, 5:Mixed Paper, 6:Branches, 7:Oversized)",
+      "type_name": "Name of the trash type in {target_language}",
+      "reason": "Reason in {target_language}"
+    }}
     """
 
     client = genai.Client(api_key=GEMINI_API_KEY)
 
     for model_name in models_to_try:
-        # 各モデルで最大2回トライする (503対策)
         for attempt in range(2):
             try:
                 print(f"DEBUG: Trying AI Model -> {model_name} (Attempt {attempt+1})")
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=[img, prompt]
+                    contents=[img, prompt],
+                    # JSONモードを強制する設定（モデルによっては効かない場合もあるが念のため）
+                    config={'response_mime_type': 'application/json'} 
                 )
+                
+                # マークダウンの削除処理
                 response_text = response.text.replace('```json', '').replace('```', '').strip()
                 ai_result = json.loads(response_text)
                 
                 success_model = model_name
-                break # 成功！リトライループを抜ける
+                break 
             
             except Exception as e:
                 error_msg = str(e)
                 print(f"WARNING: {model_name} failed: {error_msg}")
                 last_error = e
-                
-                # 503 (混雑) の場合のみ、少し待って再トライ
                 if "503" in error_msg or "UNAVAILABLE" in error_msg:
-                    time.sleep(2) # 2秒待つ
+                    time.sleep(2)
                     continue 
                 else:
-                    break # その他のエラー(429等)なら、このモデルは諦めて次のモデルへ
+                    break 
         
         if success_model:
-            break # モデルループを抜ける
+            break
 
-    # 全滅した場合
     if success_model is None:
         print(f"AI All Models Failed: {last_error}")
         return jsonify({
@@ -365,7 +411,7 @@ def predict_trash():
         }), 503
 
     # ---------------------------------------------------------
-    # 3. 結果の整形 (辞書マッチング)
+    # 3. 結果の整形
     # ---------------------------------------------------------
     final_name = ""
     final_type_id = 1
@@ -373,35 +419,42 @@ def predict_trash():
     final_reason = ""
     is_dictionary_match = False
 
-    # 辞書検索
-    dict_match = data_loader.find_in_dictionary(ai_result.get('identified_name_ja'))
-    if not dict_match:
-        dict_match = data_loader.find_in_dictionary(ai_result.get('identified_name_en'))
+    # AIの結果を初期値としてセット
+    final_name = ai_result.get('identified_name', 'Unknown')
+    final_type_id = int(ai_result.get('type_id', 1))
+    final_type_name = ai_result.get('type_name', 'Unknown')
+    final_reason = ai_result.get('reason', '')
 
+    # 辞書検索（AIが出した名前を使って辞書にあるか確認）
+    # ※辞書にあれば、より正確な公式情報で上書きする
+    dict_match = data_loader.find_in_dictionary(final_name)
+    
     if dict_match:
-        # 辞書ヒット
         is_dictionary_match = True
         name_col = f"name_{user_lang}" if user_lang != 'zh' else 'name_zh_cn'
-        final_name = dict_match.get(name_col) or dict_match.get('name_en')
+        # 辞書にその言語の名前があれば上書き、なければ英語、それもなければAIの結果を維持
+        dict_name = dict_match.get(name_col) or dict_match.get('name_en')
+        if dict_name:
+            final_name = dict_name
+
         trash_str = dict_match.get('trash_type_str', '')
-        final_type_name = trash_str
-        
-        # マップからIDへ
+        if trash_str:
+             # ここも翻訳したいが、辞書データ構造による。一旦AIの翻訳済みtype_nameを優先するか検討。
+             # 今回は「辞書の分別ID」を正として、表示名はAIの結果（翻訳済み）を使うか、
+             # フロントエンド側でIDから翻訳するほうが確実。
+             # ここでは簡易的に、辞書のIDを採用し、名前はAIのものを維持（または辞書に翻訳があればそれを使う）
+             pass
+
+        # IDのマッピング更新
         for key, val in trash_type_map.items():
             if key in trash_str:
                 final_type_id = val
                 break
         
         note_col = 'note_ja' if user_lang == 'ja' else 'note_en'
-        final_reason = dict_match.get(note_col, "")
-
-    else:
-        # AI結果
-        is_dictionary_match = False
-        final_name = ai_result.get(f'identified_name_{user_lang}') or ai_result.get('identified_name_en')
-        final_type_id = int(ai_result.get('ai_type_id', 1))
-        final_type_name = ai_result.get('ai_type_name')
-        final_reason = ai_result.get('ai_reason')
+        dict_note = dict_match.get(note_col)
+        if dict_note:
+            final_reason = dict_note # 辞書の備考があれば理由として上書き
 
     # スケジュール計算
     schedule_date = None
@@ -417,6 +470,7 @@ def predict_trash():
         except:
             pass
 
+    # JSONのキー名はフロントエンド(camera_screen.dart)に合わせて返す
     return jsonify({
         "name": final_name,
         "type_id": final_type_id,

@@ -7,7 +7,7 @@
   "settings_title": "通知設定",
   "settings_on_desc": "収集日の朝に通知を受け取る",
   "settings_off_desc": "設定して通知をONにする",
-  "settings_edit": "地域や時間を変更",
+  "settings_edit": "地域設定",
   "dialog_area_title": "地域の設定",
   "dialog_area_msg": "ゴミ出しカレンダーの地域を選択してください",
   "dialog_time_title": "通知時刻の設定",
@@ -100,5 +100,22 @@
   "btn_open_dictionary": "辞書を開く",
   "next_collection": "次回の収集日",
   "noti_msg_tomorrow": "明日({weekday})のゴミは{trash}です。",
-  "noti_msg_today": "今日({weekday})のゴミは{trash}です。"
+  "noti_msg_today": "今日({weekday})のゴミは{trash}です。",
+
+  "map_title": "ゴミ箱マップ",
+  "btn_filter": "絞り込み",
+  "btn_show_all": "全件表示",
+  "filter_title": "絞り込み",
+  "filter_reset": "リセット",
+  "filter_apply": "適用",
+  "open_google_map": "Googleマップで開く",
+
+  "map_help_title": "このマップについて",
+  "map_help_desc_1": "ここは「資源回収拠点・協力店」のマップです。",
+  "map_help_desc_2": "普段の燃やせるゴミなどを出す「路上ゴミステーション（黄色いネット）」は表示されていません。",
+  "map_help_desc_3": "「買い物ついでに電池を捨てたい」「区役所に行くついでに小型家電を捨てたい」といった時にご活用ください。",
+  "map_help_list_title": "【回収している主なもの】",
+  "map_help_list_items": "・古紙（新聞・雑誌・ダンボール）\n・空きびん、空き缶\n・使用済み乾電池\n・蛍光管\n・使用済み食用油（ペットボトルで）\n・小型家電（ドライヤー等）",
+  "map_help_source": "データ出典: 札幌市オープンデータ",
+  "map_help_close": "閉じる"
 }

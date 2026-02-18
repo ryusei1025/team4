@@ -53,5 +53,5 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "Gem2.png" # 保存した画像のパス
+  image_path: "Gem3.png" # 保存した画像のパス
   min_sdk_android: 21

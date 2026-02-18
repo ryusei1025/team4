@@ -207,20 +207,33 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onLanguageChanged(UiLang newLang) async {
-    // asyncをつける
     // 1. 設定保存
     _saveLanguageSetting(newLang);
 
-    // 2. 状態更新と再ロード
+    // 2. 状態更新（UI言語を変更）
     setState(() {
       _lang = newLang;
+      _isLoading = true; // 読み込み中の表示にする
     });
 
-    // ★3. これを追加！翻訳ファイル（JSON）を新しい言語で読み直す
+    // 3. UI翻訳テキスト（JSON）を再読み込み
     await _loadTranslations();
 
-    // 4. マップのデータ等を再取得する必要があればここで行う
-    // _fetchMapData();
+    // 4. ★ここを追加: サーバーから新しい言語でデータを再取得する
+    if (_searchController.text.isEmpty) {
+      // 検索していない場合 → 分別辞書リスト全体を再取得
+      await _fetchDictionary();
+    } else {
+      // 検索中の場合 → 同じキーワードで再検索（結果を新言語にするため）
+      await _fetchTrashData(_searchController.text);
+    }
+    
+    // 念のためローディングを解除（各fetch関数内でも制御されていますが安全策として）
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _jumpToSection(String header) {
