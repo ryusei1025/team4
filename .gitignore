@@ -1,13 +1,22 @@
-# Python（バックエンド）の不要なもの
-backend/venv/
-backend/__pycache__/
+# --- Python (バックエンド・仮想環境) ---
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
 *.pyc
-
-# Flutter（フロントエンド）の不要なもの
-frontend/build/
-frontend/.dart_tool/
-.DS_Store
-
-# サーバーのログと秘密鍵
 gunicorn_log.txt
+
+# --- Flutter (フロントエンド・ビルド生成物) ---
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# --- 重要なセキュリティ設定 (絶対にコミットしない) ---
 .env
+
+# --- システム・IDE設定 (ゴミファイル) ---
+.DS_Store
+.vscode/
+.idea/
