@@ -1,22 +1,19 @@
-# --- Python (バックエンド・仮想環境) ---
-venv/
+# --- セキュリティ（絶対に隠す！） ---
+.env
+*.pem
+*.key
+
+# --- Python & システム ---
 .venv/
-env/
+venv/
 __pycache__/
 *.py[cod]
-*.pyc
-gunicorn_log.txt
-
-# --- Flutter (フロントエンド・ビルド生成物) ---
-build/
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-
-# --- 重要なセキュリティ設定 (絶対にコミットしない) ---
-.env
-
-# --- システム・IDE設定 (ゴミファイル) ---
 .DS_Store
-.vscode/
-.idea/
+
+# --- データ類 ---
+database.db
+*.sqlite3
+
+# --- Flutter ---
+.dart_tool/
+build/

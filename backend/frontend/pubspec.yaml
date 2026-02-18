@@ -1,0 +1,57 @@
+name: frontend
+description: "Flutter frontend for trash map"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+
+  intl: ^0.19.0
+
+  #ural起動
+  url_launcher: ^6.2.5
+  flutter:
+    sdk: flutter
+
+  # 位置情報取得（Web対応は自動）
+  geolocator: ^14.0.2
+
+  # HTTP通信
+  http: ^1.2.0
+
+  # カメラ・写真選択
+  image_picker: ^1.0.7
+
+  # 通知
+  flutter_local_notifications: ^17.2.1
+
+  # Google Maps
+  google_maps_flutter: ^2.14.0
+  google_maps_flutter_web: ^0.5.6
+
+  # ローカル保存
+  shared_preferences: ^2.2.2
+  # iOS風アイコン
+  cupertino_icons: ^1.0.8
+  timezone: ^0.9.4
+  csv: ^6.0.0
+  permission_handler: ^12.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/translations/
+    - assets/schedules.csv
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "Gem3.png" # 保存した画像のパス
+  min_sdk_android: 21

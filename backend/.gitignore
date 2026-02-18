@@ -1,18 +1,22 @@
-# Pythonの仮想環境 (7000個の犯人)
+# --- Python (バックエンド・仮想環境) ---
 venv/
 .venv/
 env/
-
-# コンパイルキャッシュ
 __pycache__/
 *.py[cod]
+*.pyc
+gunicorn_log.txt
 
-# 環境変数 (セキュリティ)
+# --- Flutter (フロントエンド・ビルド生成物) ---
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# --- 重要なセキュリティ設定 (絶対にコミットしない) ---
 .env
 
-# Macのゴミファイル
+# --- システム・IDE設定 (ゴミファイル) ---
 .DS_Store
-
-# IDEの設定
 .vscode/
 .idea/

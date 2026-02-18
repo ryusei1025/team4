@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banana App 多言語デモ</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; color: #333; }
+        h1 { color: #f39c12; display: flex; align-items: center; justify-content: space-between; }
+        
+        /* カードデザイン */
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #eee; }
+        h2 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #f39c12; padding-bottom: 10px; display: inline-block; }
+        
+        /* 言語セレクター */
+        .lang-control { font-size: 1rem; padding: 5px 10px; border-radius: 5px; border: 2px solid #f39c12; background: white; }
+        
+        /* フォーム要素 */
+        select, input { padding: 10px; border-radius: 5px; border: 1px solid #ddd; width: 60%; margin-right: 10px; }
+        button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #2980b9; }
+        
+        /* リスト表示 */
+        ul { list-style: none; padding: 0; }
+        li { padding: 8px 0; border-bottom: 1px solid #eee; }
+        
+        /* 検索結果 */
+        .result-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .result-name { font-weight: bold; font-size: 1.1em; color: #2c3e50; }
+        .result-type { color: white; background: #e74c3c; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-left: 10px; }
+        .result-note { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; display: block; }
+
+        /* ゴミ箱 */
+        .bin-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .map-link { background: #27ae60; color: white; text-decoration: none; padding: 5px 10px; border-radius: 5px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <h1>
+        <span>🍌 Banana App Demo</span>
+        <select id="langSelect" class="lang-control" onchange="loadAreas()">
+            <option value="ja" selected>🇯🇵 日本語 (Japanese)</option>
+            <option value="en">🇺🇸 English</option>
+            <option value="zh_cn">🇨🇳 中文 (Chinese)</option>
+            <option value="ko">🇰🇷 한국어 (Korean)</option>
+            <option value="vi">🇻🇳 Tiếng Việt (Vietnamese)</option>
+            <option value="ru">🇷🇺 Русский (Russian)</option>
+            <option value="id">🇮🇩 Bahasa Indonesia</option>
+        </select>
+    </h1>
+
+    <div class="card">
+        <h2>📍 1. 地域 & スケジュール (Area & Schedule)</h2>
+        <p>言語を選んでからエリアを選択してください。</p>
+        
+        <div style="display:flex; gap:10px;">
+            <select id="areaSelect">
+                <option value="">エリアを読み込み中...</option>
+            </select>
+            <button onclick="getSchedule()">スケジュール確認</button>
+        </div>
+
+        <div id="schedule-results" style="margin-top:15px;"></div>
+    </div>
+
+    <div class="card">
+        <h2>🔍 2. 分別辞典検索 (Dictionary)</h2>
+        <p>選んだ言語で結果が表示されます。</p>
+        <div style="display:flex;">
+            <input type="text" id="searchInput" placeholder="Search trash (e.g. Banana)">
+            <button onclick="searchTrash()">検索</button>
+        </div>
+        <div id="search-results"></div>
+    </div>
+
+    <div class="card">
+        <h2>🗑️ 3. ゴミ箱データ (Bins & Map)</h2>
+        <button onclick="getBins()">ゴミ箱リストを取得</button>
+        <div id="bin-results" style="margin-top:10px;"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://50.17.227.109.nip.io/api';
+
+        // ページ読み込み時にエリア一覧を取得
+        window.onload = loadAreas;
+
+        // ==========================================
+        // 1. エリア一覧を取得 (言語対応)
+        // ==========================================
+        async function loadAreas() {
+            const lang = document.getElementById('langSelect').value;
+            const select = document.getElementById('areaSelect');
+            select.innerHTML = '<option>Loading...</option>';
+
+            try {
+                // 言語パラメータ(?lang=xx)をつけてAPIを呼ぶ
+                const res = await fetch(`${API_URL}/areas?lang=${lang}`);
+                const areas = await res.json();
+
+                select.innerHTML = '';
+                areas.forEach(area => {
+                    const option = document.createElement('option');
+                    option.value = area.id;
+                    option.textContent = area.name; // サーバー側で翻訳された名前が入る
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                select.innerHTML = '<option>エラー: サーバーに接続できません</option>';
+                console.error(err);
+            }
+        }
+
+        // ==========================================
+        // 2. スケジュールを取得
+        // ==========================================
+        async function getSchedule() {
+            const areaId = document.getElementById('areaSelect').value;
+            const resultDiv = document.getElementById('schedule-results');
+            
+            if (!areaId) {
+                alert("エリアを選択してください");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/schedules?area_id=${areaId}`);
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    resultDiv.innerHTML = "<p>スケジュールがありません。</p>";
+                    return;
+                }
+
+                // 表示作成
+                let html = `<h3>📅 今後の収集日</h3><ul>`;
+                // 直近5件だけ表示
+                data.slice(0, 5).forEach(sch => {
+                    html += `
+                        <li style="border-left: 5px solid ${sch.trash_type.color}; padding-left: 10px;">
+                            <strong>${sch.date}</strong> : 
+                            ${sch.trash_type.name} 
+                        </li>`;
+                });
+                html += "</ul>";
+                resultDiv.innerHTML = html;
+
+            } catch (err) {
+                alert("スケジュール取得エラー");
+            }
+        }
+
+        // ==========================================
+        // 3. ゴミ分別検索 (言語対応)
+        // ==========================================
+        async function searchTrash() {
+            const keyword = document.getElementById('searchInput').value;
+            const lang = document.getElementById('langSelect').value;
+            const resultDiv = document.getElementById('search-results');
+
+            if (!keyword) return;
+
+            resultDiv.innerHTML = "<p>検索中...</p>";
+
+            try {
+                // 言語パラメータ(?lang=xx)をつけてAPIを呼ぶ
+                const res = await fetch(`${API_URL}/trash_search?q=${keyword}&lang=${lang}`);
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    resultDiv.innerHTML = "<p>見つかりませんでした (Not found)。<br>※今は日本語名での検索のみヒットします(APIの仕様)</p>";
+                    return;
+                }
+
+                resultDiv.innerHTML = `<p>${data.length} 件ヒットしました</p>`;
+                
+                data.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.innerHTML = `
+                        <div>
+                            <span class="result-name">${item.name}</span>
+                            <span class="result-type">${item.trash_type_name}</span>
+                        </div>
+                        <small class="result-note">${item.note || 'No notes'}</small>
+                        <small>💰 ${item.fee}</small>
+                    `;
+                    resultDiv.appendChild(div);
+                });
+
+            } catch (err) {
+                resultDiv.innerHTML = "<p>エラーが発生しました。</p>";
+            }
+        }
+
+        // ==========================================
+        // 4. ゴミ箱マップデータ取得
+        // ==========================================
+        async function getBins() {
+            const resultDiv = document.getElementById('bin-results');
+            resultDiv.innerHTML = "読み込み中...";
+
+            try {
+                const res = await fetch(`${API_URL}/bins`);
+                const data = await res.json();
+
+                resultDiv.innerHTML = `<p>📍 ${data.length} 箇所の回収ボックスがあります</p>`;
+                
+                // 最初の10件を表示
+                data.slice(0, 10).forEach(bin => {
+                    // Google Mapsへのリンクを作成
+                    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${bin.lat},${bin.lon}`;
+                    
+                    const div = document.createElement('div');
+                    div.className = 'bin-item';
+                    div.innerHTML = `
+                        <div>
+                            <strong>${bin.name}</strong><br>
+                            <small>${bin.type}</small>
+                        </div>
+                        <a href="${mapUrl}" target="_blank" class="map-link">Google Maps ↗</a>
+                    `;
+                    resultDiv.appendChild(div);
+                });
+
+            } catch (err) {
+                resultDiv.innerHTML = "取得エラー";
+            }
+        }
+    </script>
+</body>
+</html>

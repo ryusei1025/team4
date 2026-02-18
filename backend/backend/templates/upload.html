@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ゴミ分別AIカメラ</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        .result-box {
+            border: 2px solid #ddd;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 10px;
+            display: none;
+            text-align: left;
+        }
+        .loading { display: none; color: blue; font-weight: bold; }
+        button { font-size: 18px; padding: 10px 20px; margin-top: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; }
+        input { font-size: 16px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🗑️ ゴミ分別AIカメラ</h1>
+
+    <p>写真を撮るか選んで、「判定開始」を押してください。</p>
+
+    <form id="uploadForm">
+        <input type="file" id="imageInput" accept="image/*" required>
+        <br><br>
+        <button type="submit">📷 判定開始！</button>
+    </form>
+
+    <div id="loading" class="loading">
+        <p>🤖 AIが考え中...お待ちください...</p>
+    </div>
+
+    <div id="resultArea" class="result-box">
+        <h2 id="resName"></h2>
+        <p><strong>種類:</strong> <span id="resType"></span></p>
+        <p><strong>アドバイス:</strong> <span id="resMessage"></span></p>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const loading = document.getElementById('loading');
+        const resultArea = document.getElementById('resultArea');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileField = document.getElementById('imageInput');
+
+            // ファイルが選択されていない場合
+            if(fileField.files.length === 0){
+                alert("写真を選択してください！");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', fileField.files[0]);
+
+            loading.style.display = 'block';
+            resultArea.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/analyze_trash', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error("サーバーエラー");
+                }
+
+                const data = await response.json();
+                document.getElementById('resName').innerText = "🗑️ " + data.name;
+                document.getElementById('resType').innerText = data.type;
+                document.getElementById('resMessage').innerText = data.message;
+                resultArea.style.display = 'block';
+            } catch (error) {
+                alert("エラーが発生しました: " + error);
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

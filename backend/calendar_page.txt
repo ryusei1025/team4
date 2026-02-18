@@ -1,0 +1,1233 @@
+// import 'dart:convert'; // 将来JSON読み込みが必要になったら復活させる
+
+import 'package:flutter/gestures.dart'; // マウスホイール操作用
+import 'package:flutter/material.dart'; // UI部品用
+import 'drawer_menu.dart'; // ドロワーメニューや言語設定
+import 'package:csv/csv.dart'; // CSV解析用
+import 'package:flutter/services.dart' show rootBundle; // アセット読み込み用
+
+// ==========================================
+// 1. 共通定義：ゴミ種別・基本設定
+// ==========================================
+
+/// ゴミの種類（判定・表示・色・アイコンの基準）
+// ★Excelに合わせて細分化
+enum GarbageType {
+  burnable,    // 燃やせる
+  spray,       // スプレー缶（ID1の右半分）
+  nonBurnable, // 燃やせない
+  lighter,     // ライター・電池など（ID2の右半分）
+  recyclable,  // びん・缶・ペット
+  battery,     // 電池
+  plastic,     // プラ
+  paper,       // 雑がみ
+  green,       // 枝・葉
+}
+
+/// ゴミの表示順序（複数のゴミが重なった時の優先順位）
+const List<GarbageType> garbageTypeDisplayOrder = <GarbageType>[
+  GarbageType.burnable,
+  GarbageType.spray,
+  GarbageType.nonBurnable,
+  GarbageType.lighter,
+  GarbageType.recyclable,
+  GarbageType.plastic,
+  GarbageType.paper,
+  GarbageType.green,
+];
+
+/// 日付を整数のキーに変換するヘルパー関数
+/// 例：1月3日 → 103, 12月31日 → 1231
+int mdKey(DateTime date) => date.month * 100 + date.day;
+
+// ==========================================
+// 2. ルール判定クラス & ヘルパー関数
+// ==========================================
+
+/// 「第N週 × 曜日 → ゴミ種別」を表すルールクラス
+class GarbageRule {
+  /// 対象週（例：{1,3}なら第1・第3週）
+  final Set<int> weeks;
+  
+  /// 対象曜日（0=日, 1=月, ... 6=土）
+  final int weekday0to6;
+  
+  /// このルールのゴミ種別
+  final GarbageType type;
+
+  const GarbageRule({
+    required this.weeks,
+    required this.weekday0to6,
+    required this.type,
+  });
+
+  /// 与えられた日付がこのルールに一致するか判定
+  bool matches(DateTime date) {
+    final w = weekOfMonth(date);       // 第何週か
+    final wd = weekdayIndex0to6(date); // 曜日(0-6)
+    return weeks.contains(w) && wd == weekday0to6;
+  }
+
+  /// 月内の第何週かを計算（簡易版: 1..7日=第1週...）
+  static int weekOfMonth(DateTime date) => ((date.day - 1) ~/ 7) + 1;
+}
+
+/// DateTimeの曜日(1=月..7=日)を、(0=日..6=土)に変換
+int weekdayIndex0to6(DateTime date) => date.weekday % 7;
+
+// ★背景色（Excel指定）
+Color garbageBgColor(GarbageType type) {
+  switch (type) {
+    case GarbageType.burnable:    return const Color(0xFFFFF176); // 黄色 (Yellow300)
+    case GarbageType.spray:       return const Color(0xFF80DEEA); // 水色 (Cyan200)
+    case GarbageType.nonBurnable: return const Color(0xFFFFCC80); // オレンジ (Orange200)
+    case GarbageType.lighter:     return Colors.white;            // 白
+    case GarbageType.recyclable:  return Colors.white;            // 白
+    case GarbageType.battery:     return const Color(0xFFF8BBD0); // ピンク
+    case GarbageType.plastic:     return Colors.white;            // 白 
+    case GarbageType.paper:       return const Color(0xFFE1BEE7); // 薄紫 (Purple100)
+    case GarbageType.green:       return const Color(0xFFC8E6C9); // 薄緑 (Green100)
+  }
+}
+
+/// ゴミ種別ごとの「表示名」（多言語対応）
+String garbageLabel(GarbageType type, UiLang lang) {
+  if (lang == UiLang.ja) {
+    switch (type) {
+      case GarbageType.burnable:    return '燃やせるごみ（有料）';
+      case GarbageType.spray:       return 'スプレー缶類（別袋無料）';
+      case GarbageType.nonBurnable: return '燃やせないごみ（有料）';
+      case GarbageType.lighter:     return '加熱式たばこ・ライター・筒型乾電池（別袋無料）';
+      case GarbageType.recyclable:  return 'びん・缶・ペットボトル（無料）';
+      case GarbageType.battery:     return '乾電池（無料）';
+      case GarbageType.plastic:     return '容器包装プラスチック（無料）';
+      case GarbageType.paper:       return '雑がみ（無料）';
+      case GarbageType.green:       return '枝・葉・草（無料）';
+    }
+  } else {
+    switch (type) {
+      case GarbageType.burnable:    return 'Burnable (Paid)';
+      case GarbageType.spray:       return 'Spray cans (Free)';
+      case GarbageType.nonBurnable: return 'Non-burnable (Paid)';
+      case GarbageType.lighter:     return 'Lighters/Batteries (Free)';
+      case GarbageType.recyclable:  return 'Bottles/Cans/PET (Free)';
+      case GarbageType.battery:     return 'Batteries (Free)';
+      case GarbageType.plastic:     return 'Plastic containers (Free)';
+      case GarbageType.paper:       return 'Mixed Paper (Free)';
+      case GarbageType.green:       return 'Leaves/Grass (Free)';
+    }
+  }
+}
+
+/// 曜日ラベルの取得 (0=日 ... 6=土)
+// ※変更なし（そのまま使えます）
+String weekdayLabel0to6(int wd0to6, UiLang lang) {
+  final ja = const ['日', '月', '火', '水', '木', '金', '土'];
+  final en = const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // 安全のためclampで範囲を制限
+  return (lang == UiLang.ja ? ja : en)[wd0to6.clamp(0, 6)];
+}
+
+/// 第N週のラベル取得
+// ※変更なし（そのまま使えます）
+String weekLabel(int week, UiLang lang) {
+  if (lang == UiLang.ja) return '第$week';
+  switch (week) {
+    case 1: return '1st';
+    case 2: return '2nd';
+    case 3: return '3rd';
+    default: return '${week}th';
+  }
+}
+
+/// ゴミ種別ごとの「アイコン」（Excel準拠）
+IconData garbageIcon(GarbageType type) {
+  switch (type) {
+    case GarbageType.burnable:    return Icons.local_fire_department;
+    case GarbageType.spray:       return Icons.sanitizer;          // スプレー
+    case GarbageType.nonBurnable: return Icons.block;             // 禁止マーク
+    case GarbageType.lighter:     return Icons.smoking_rooms;     // 電池・ライター
+    case GarbageType.recyclable:  return Icons.local_drink;       // びん・缶
+    case GarbageType.battery:     return Icons.battery_std;       // 乾電池
+    case GarbageType.plastic:     return Icons.recycling;         // プラ
+    case GarbageType.paper:       return Icons.description;       // 紙
+    case GarbageType.green:       return Icons.park;              // 草木
+  }
+}
+
+/// ゴミ種別ごとの「アイコン色」（Excel準拠）
+Color garbageIconColor(GarbageType type) {
+  switch (type) {
+    case GarbageType.burnable:    return Colors.red;
+    case GarbageType.spray:       return Colors.grey.shade700;
+    case GarbageType.nonBurnable: return Colors.red;
+    case GarbageType.lighter:     return Colors.grey.shade700;
+    case GarbageType.recyclable:  return Colors.blue;
+    case GarbageType.battery:     return Colors.grey.shade800;
+    case GarbageType.plastic:     return const Color(0xFFC2185B); // 濃いピンク
+    case GarbageType.paper:       return Colors.purple;
+    case GarbageType.green:       return Colors.green.shade800;
+  }
+}
+
+// ==========================================
+// 3. カレンダー画面本体 (CalendarScreen)
+// ==========================================
+
+class CalendarScreen extends StatefulWidget {
+  const CalendarScreen({super.key});
+
+  @override
+  State<CalendarScreen> createState() => _CalendarScreenState();
+}
+
+class _CalendarScreenState extends State<CalendarScreen> {
+  // --- 設定値 ---
+  static const int baseYear = 2026;
+  static const int maxYear = 2100;
+  static final DateTime baseMonth = DateTime(baseYear, 1, 1);
+  static const int totalMonths = (maxYear - baseYear + 1) * 12;
+
+  // --- 状態変数 ---
+  late final PageController _pageController; // ページ制御
+  late int _visibleYear;                     // 現在表示中の年
+  late int _visibleMonth;                    // 現在表示中の月
+  late int _pickedYear;                      // ドロップダウン選択年
+  late int _pickedMonth;                     // ドロップダウン選択月
+  DateTime? _selectedDate;                   // タップされた日付
+
+  final Map<String, List<String>> _areaData = {
+    '中央区': ['中央区1', '中央区2', '中央区3', '中央区4', '中央区5', '中央区6'],
+    '豊平区': ['豊平区1', '豊平区2', '豊平区3', '豊平区4'],
+    '清田区': ['清田区1', '清田区2'],
+    '北区': ['北区1', '北区2', '北区3', '北区4', '北区5', '北区6'],
+    '東区': ['東区1', '東区2', '東区3', '東区4', '東区5', '東区6'],
+    '白石区': ['白石区1', '白石区2', '白石区3', '白石区4'],
+    '厚別区': ['厚別区1', '厚別区2', '厚別区3', '厚別区4'],
+    '南区': ['南区1', '南区2', '南区3', '南区4', '南区5', '南区6', '南区7'],
+    '西区': ['西区1', '西区2', '西区3', '西区4'],
+    '手稲区': ['手稲区1', '手稲区2', '手稲区3'],
+  };
+
+  // 区のリスト（中央区, 豊平区...）を取得するゲッター
+  List<String> get _wardList => _areaData.keys.toList();
+
+  // 現在選択されている地域（初期値）
+  String _selectedArea = '中央区1';
+  
+  // 現在選択されている「区」（初期値は仮置き、initStateで確定させる）
+  String _selectedWard = '中央区';
+
+  UiLang _lang = UiLang.ja;
+  bool _showGuide = false; // ガイド表示フラグ
+
+  // ==========================================
+  // 5. データ：お知らせ・お問い合わせ・祝日設定
+  // ==========================================
+
+  // 重要なお知らせ（共通）
+  late final List<String> _commonImportantNotice = <String>[
+    'ごみは収集日の朝8時30分までに出してください',
+    '指定袋以外での排出は収集されません',
+    '年末年始は収集日程が変更になります',
+    '台風等の悪天候時は収集を中止する場合があります',
+    '土日はごみ収集を行いません',
+  ];
+
+  // 全10区に対応させました（内容は共通のものをセット）
+  late final Map<String, List<String>> _importantNoticeByArea = {
+    '中央区': _commonImportantNotice,
+    '北区': _commonImportantNotice,
+    '東区': _commonImportantNotice,
+    '白石区': _commonImportantNotice,
+    '厚別区': _commonImportantNotice,
+    '豊平区': _commonImportantNotice,
+    '清田区': _commonImportantNotice,
+    '南区': _commonImportantNotice,
+    '西区': _commonImportantNotice,
+    '手稲区': _commonImportantNotice,
+  };
+
+  // お問い合わせ情報（共通）
+  late final List<String> _commonInquiry = <String>[
+    '札幌市コールセンター : [011-222-4894]',
+    '受付時間 : [平日 8:00〜21:00]',
+    '土日祝 : [9:00〜17:00]',
+    '札幌市公式ウェブサイト : https://www.city.sapporo.jp/seiso/kaisyu/index.html',
+  ];
+
+  // 全10区に対応させました
+  late final Map<String, List<String>> _inquiryByArea = {
+    '中央区': _commonInquiry,
+    '北区': _commonInquiry,
+    '東区': _commonInquiry,
+    '白石区': _commonInquiry,
+    '厚別区': _commonInquiry,
+    '豊平区': _commonInquiry,
+    '清田区': _commonInquiry,
+    '南区': _commonInquiry,
+    '西区': _commonInquiry,
+    '手稲区': _commonInquiry,
+  };
+
+  // ★【追加】読み込んだスケジュールデータ（日付 -> ゴミ種別リスト）
+  Map<DateTime, List<GarbageType>> _scheduleCache = {};
+  
+  // ==========================================
+  // 6. 初期化とロジックメソッド
+  // ==========================================
+
+@override
+  void initState() {
+    super.initState();
+
+    _updateWardFromArea();
+
+    final now = DateTime.now();
+    
+    // ★修正1：起動時に「今日」の日付を選択状態にする（時刻は00:00:00に丸める）
+    _selectedDate = DateTime(now.year, now.month, now.day);
+
+    // ★修正2：カレンダーの表示月も「今日」に合わせる
+    // （もし今日が設定範囲(2026年〜)より前なら、2026年1月にする等の安全策は残します）
+    final initialDate = (now.year < baseYear)
+        ? DateTime(baseYear, 1, 1)
+        : DateTime(now.year, now.month, 1);
+
+    _visibleYear = initialDate.year;
+    _visibleMonth = initialDate.month;
+    _pickedYear = _visibleYear;
+    _pickedMonth = _visibleMonth;
+
+    // PageViewの初期位置を計算
+    final initialIndex = _monthIndexFrom(baseMonth, DateTime(_visibleYear, _visibleMonth, 1));
+
+    _pageController = PageController(
+      initialPage: initialIndex.clamp(0, totalMonths - 1),
+    );
+
+    // CSVデータを読み込む
+    _loadScheduleData();
+  }
+
+  // ★【追加】CSVデータを読み込んで解析するメソッド
+  Future<void> _loadScheduleData() async {
+
+    try {
+      // 1. CSVファイルを文字列として読み込む
+      final rawData = await rootBundle.loadString('assets/schedules.csv');
+      
+      // 2. CSVをリスト形式に変換
+      List<List<dynamic>> rows = const CsvToListConverter().convert(rawData);
+
+      if (rows.isEmpty) return;
+
+      // 3. ヘッダー行（1行目）から、現在選択されているエリア（例: "中央区1"）の列番号を探す
+      final header = rows[0].map((e) => e.toString()).toList();
+      final columnIndex = header.indexOf(_selectedArea);
+
+      if (columnIndex == -1) {
+        print('Error: Area $_selectedArea not found in CSV header');
+        return;
+      }
+
+      // 4. データを解析してキャッシュを作る
+      final Map<DateTime, List<GarbageType>> newCache = {};
+
+      // 1行目はヘッダーなのでスキップして2行目からループ
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.length <= columnIndex) continue; // データが欠けている行は飛ばす
+
+        // 日付を解析 (2列目にあると想定: "2025-10-01T00:00:00" 形式)
+        // ※CSVの仕様に合わせて列番号を調整してください。今回は日付が2列目(index 1)と仮定
+        final dateStr = row[1].toString(); 
+        DateTime? date;
+        try {
+          date = DateTime.parse(dateStr);
+        } catch (e) {
+          continue; // 日付パースエラーなら飛ばす
+        }
+
+        // ゴミIDを取得（CSV上の数字）
+        final cellValue = row[columnIndex];
+        final garbageId = int.tryParse(cellValue.toString());
+
+        if (garbageId != null) {
+          // ★修正：リストで返ってくるメソッドを使用
+          final types = _convertIdToGarbageList(garbageId);
+          
+          if (types.isNotEmpty) {
+            final dateKey = DateTime(date.year, date.month, date.day);
+            
+            // まだキーがなければ空リストを作成
+            if (!newCache.containsKey(dateKey)) {
+              newCache[dateKey] = [];
+            }
+            
+            // ★修正：リストの中身をすべて追加
+            newCache[dateKey]!.addAll(types);
+          }
+        }
+      }
+
+      // 5. 完了したら画面更新
+      setState(() {
+        _scheduleCache = newCache;
+      });
+
+    } catch (e) {
+      print('Error loading CSV: $e');
+    }
+  }
+
+// ★修正：Excel定義に合わせてIDをリストに変換
+  List<GarbageType> _convertIdToGarbageList(int id) {
+    switch (id) {
+      case 1: 
+        // 燃やせる（黄） ＋ スプレー（水色）
+        return [GarbageType.burnable, GarbageType.spray];
+      case 2: 
+        // 燃やせない（オレンジ） ＋ ライター（白）
+        return [GarbageType.nonBurnable, GarbageType.lighter];
+      case 8: 
+        // びん・缶・ペット, 乾電池
+        return [GarbageType.recyclable, GarbageType.battery]; 
+      case 9: 
+        return [GarbageType.plastic];    // プラ
+      case 10: 
+        return [GarbageType.paper];      // 雑がみ
+      case 11: 
+        return [GarbageType.green];      // 枝・葉
+      default:
+        return [];
+    }
+  }
+
+  // エリア名から区名を逆算してセットするメソッド
+  void _updateWardFromArea() {
+    for (var ward in _areaData.keys) {
+      if (_selectedArea.startsWith(ward)) {
+        _selectedWard = ward;
+        break;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // 基準月からターゲット月までの月数（インデックス）を計算
+  int _monthIndexFrom(DateTime base, DateTime target) =>
+      (target.year - base.year) * 12 + (target.month - base.month);
+
+  // インデックスからDateTimeを復元
+  DateTime _monthFromIndex(int index) => DateTime(
+    baseYear + (index ~/ 12),
+    1 + (index % 12),
+    1,
+  );
+
+  // マウスホイールでのページ送り処理
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      if (event.scrollDelta.dy > 18.0) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      } else if (event.scrollDelta.dy < -18.0) {
+        _pageController.previousPage(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+  }
+
+  // ドロップダウンで選んだ年月にジャンプ
+  void _goToPickedMonth() {
+    final target = DateTime(_pickedYear, _pickedMonth, 1);
+    final idx = _monthIndexFrom(baseMonth, target).clamp(0, totalMonths - 1);
+    _pageController.animateToPage(
+      idx,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  // カレンダーの日付セルをタップした時の処理
+  void _onDateTap(DateTime date, {required DateTime currentMonth}) {
+    setState(() => _selectedDate = date);
+
+    // 月をまたいでタップした場合、ドロップダウンも更新して移動
+    if (date.year != currentMonth.year || date.month != currentMonth.month) {
+      setState(() {
+        _pickedYear = date.year.clamp(baseYear, maxYear);
+        _pickedMonth = date.month;
+      });
+      _goToPickedMonth();
+    }
+  }
+
+/// 指定された日付のゴミ種別を取得（複数対応）
+  List<GarbageType> _garbageTypesFor(DateTime date) {
+    // 日付キーを作成（時刻情報を捨てて年月日だけにする）
+    final dateKey = DateTime(date.year, date.month, date.day);
+    
+    // CSVから読み込んだキャッシュから取得。データがなければ空リストを返す
+    return _scheduleCache[dateKey] ?? [];
+  }
+
+/// 日付選択時に表示するテキストを作成
+  String _garbageTextFor(DateTime date) {
+    // 1. CSVデータから、その日のゴミ種別を取得
+    // （先ほど修正したメソッドを使います）
+    final types = _garbageTypesFor(date);
+
+    // 2. 収集なしの場合
+    if (types.isEmpty) {
+      return _lang == UiLang.ja 
+          ? '収集なし' 
+          : 'No collection';
+    }
+
+    // 3. ゴミ種別を文字に変換して連結（例：「燃やせるごみ・プラスチック」）
+    // garbageLabelメソッドは元のコードにあるはずなので、そのまま使います
+    final gText = types.map((t) => garbageLabel(t, _lang))
+                       .join(_lang == UiLang.ja ? '・' : ' / ');
+
+    // 4. シンプルにゴミの内容だけを返す
+    // （日付や曜日は画面の他の場所に表示されるため、ここでは不要です）
+    return gText;
+  }
+
+  /// 選択中の地域名から、対応する地図画像のパスを返す
+  String _getAreaMapAssetPath(String areaName) {
+    // プレフィックス（前方一致）で判定します
+    if (areaName.startsWith('中央区')) return 'assets/images/map_chuo.png';
+    if (areaName.startsWith('北区')) return 'assets/images/map_kita.png';
+    if (areaName.startsWith('東区')) return 'assets/images/map_higashi.png';
+    if (areaName.startsWith('白石区')) return 'assets/images/map_shiroishi.png';
+    if (areaName.startsWith('厚別区')) return 'assets/images/map_atsubetsu.png';
+    if (areaName.startsWith('豊平区')) return 'assets/images/map_toyohira.png';
+    if (areaName.startsWith('清田区')) return 'assets/images/map_kiyota.png';
+    if (areaName.startsWith('南区')) return 'assets/images/map_minami.png';
+    if (areaName.startsWith('西区')) return 'assets/images/map_nishi.png';
+    if (areaName.startsWith('手稲区')) return 'assets/images/map_teine.png';
+    
+    return ''; // 画像がない場合
+  }
+
+  /// 地図画像をポップアップで表示する
+  void _showAreaMapDialog() {
+    final path = _getAreaMapAssetPath(_selectedArea);
+    if (path.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // 内容に合わせて高さを調整
+            children: [
+              // ヘッダー（タイトルと閉じるボタン）
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0),
+                      child: Text(
+                        '$_selectedArea のエリア',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // 画像表示エリア
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Image.asset(
+                    path,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      // 画像が見つからない場合のエラー表示
+                      return const Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('画像が見つかりませんでした。\n(assets/images/を確認してください)'),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+@override // buildメソッドをオーバーライドしてUIを描画
+  Widget build(BuildContext context) {
+    // 画面UI構築（状態変化、setStateなどで再ビルドされる）
+    return Scaffold(
+      // 画面の基本構造（土台）
+      backgroundColor: const Color(0xFFF6F7FB), // 背景色（薄いグレー）
+
+      // 左側のドロワーメニュー（外部ファイルで定義されたWidget）
+      drawer: LeftMenuDrawer(
+        lang: _lang,
+        selectedArea: _selectedArea,
+      ),
+
+      // 上部のヘッダーバー（固定表示）
+      appBar: AppBar(
+        centerTitle: true, // タイトルを中央寄せ
+
+        titleSpacing: 0,
+
+        // 左側のハンバーガーメニューボタン
+        leading: Builder(
+          // Scaffold.of(context)を正しく動作させるためにBuilderで新しいcontextを作成
+          builder: (ctx) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(ctx).openDrawer(), // ドロワーを開く
+          ),
+        ),
+
+      title: Container(
+        padding: EdgeInsets.zero, // 余計な余白を消して広く使う
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center, // 中央寄せ
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ① 区を選ぶドロップダウン（例：中央区）
+            Flexible(
+              flex: 5, // 幅の比率（少し広め）
+              child: _HeaderDropdown<String>(
+                label: _lang == UiLang.ja ? '区' : 'Ward',
+                value: _selectedWard,
+                items: _wardList, // 区のリスト
+                itemLabel: (v) => v,
+                width: null, // ★重要：nullにしてFlexibleに幅調整を任せる
+                onChanged: (newWard) {
+                  setState(() {
+                    _selectedWard = newWard;
+                    // 区が変わったら、その区の「1番目」を自動選択する
+                    _selectedArea = _areaData[newWard]!.first;
+                  });
+                },
+              ),
+            ),
+            
+            const SizedBox(width: 8), // 間隔
+
+            // ---------------------------------------------
+            // ② 番号を選ぶドロップダウン（幅の比率 4）
+            // ---------------------------------------------
+            Expanded(
+              flex: 4, // 4割の幅を使う
+              child: _HeaderDropdown<String>(
+                label: 'No.',
+                value: _selectedArea,
+                items: _areaData[_selectedWard]!,
+                // 「中央区1」→「1」と表示
+                itemLabel: (v) => v.replaceFirst(_selectedWard, ''), 
+                width: null, // 自動幅
+                onChanged: (newArea) {
+                  setState(() {
+                    _selectedArea = newArea;
+                  });
+                  // 番号が変わったら再読み込み
+                  _loadScheduleData();
+                },
+              ),
+            ),
+
+            const SizedBox(width: 8), // 間隔
+
+            // ③ マップ確認ボタン（サイズ固定だがFlexible内にあるので安全）
+            Container(
+              width: 36, // 少し小さく
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE7EBF3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE1E5EE)),
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.map_outlined, size: 20, color: Colors.blueGrey),
+                tooltip: _lang == UiLang.ja ? '地図を確認' : 'Check Map',
+                onPressed: _showAreaMapDialog,
+              ),
+            ),
+          ],
+        ),
+      ),
+
+        // 右側の言語切り替えボタン
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: LanguageSelector(
+              currentLang: _lang,
+              onChanged: (v) => setState(() => _lang = v), // 言語変更時に全体を再描画
+            ),
+          ),
+        ],
+      ),
+
+// メインコンテンツ部分（スクロール可能）
+      body: Scrollbar(
+        // スクロールバーを表示（PC/Webでの操作性向上）
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16), // 画面端からの余白
+          child: Center(
+            // 大画面でもコンテンツが広がりすぎないように中央寄せ
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520), // 最大幅を520pxに制限
+              child: Column(
+                // 要素を縦方向に並べる
+                children: [
+                  
+                  // 1. カレンダーカード（年月選択 + カレンダー本体）
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE1E5EE)), // 薄い枠線
+                    ),
+                    child: Column(
+                      children: [
+                        // 年・月の選択ドロップダウン行
+                        Row(
+                          children: [
+                            // 「年」選択
+                            Expanded(
+                              child: _LabeledDropdown<int>(
+                                label: '年',
+                                value: _pickedYear,
+                                items: List.generate(
+                                  maxYear - baseYear + 1,
+                                  (i) => baseYear + i,
+                                ),
+                                itemLabel: (v) => '$v',
+                                onChanged: (v) {
+                                  setState(() => _pickedYear = v);
+                                  _goToPickedMonth(); // 選択した年月にカレンダーをジャンプ
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // 「月」選択
+                            Expanded(
+                              child: _LabeledDropdown<int>(
+                                label: '月',
+                                value: _pickedMonth,
+                                items: List.generate(12, (i) => i + 1),
+                                itemLabel: (v) => '$v',
+                                onChanged: (v) {
+                                  setState(() => _pickedMonth = v);
+                                  _goToPickedMonth(); // 選択した年月にカレンダーをジャンプ
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+
+const SizedBox(height: 8),
+
+                        // カレンダーグリッド本体
+                        AspectRatio(
+                          aspectRatio: 7 / 7, // 正方形に近い比率で固定
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFCED6E6)),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              children: [
+                                // 曜日ヘッダー（日〜土）
+                                _WeekdayRow(lang: _lang),
+                                
+                                // 日付部分（スワイプ/スクロール可能なPageView）
+                                Expanded(
+                                  child: Listener(
+                                    // マウスホイールでの操作を検知
+                                    onPointerSignal: _handlePointerSignal,
+                                    child: PageView.builder(
+                                      controller: _pageController,
+                                      scrollDirection: Axis.vertical, // 縦スクロール
+                                      itemCount: totalMonths,
+                                      onPageChanged: (index) {
+                                        // ページ切り替え時に年月表示を同期
+                                        final m = _monthFromIndex(index);
+                                        setState(() {
+                                          _visibleYear = m.year;
+                                          _visibleMonth = m.month;
+                                          _pickedYear = m.year;
+                                          _pickedMonth = m.month;
+                                        });
+                                      },
+                                      itemBuilder: (context, index) {
+                                        final month = _monthFromIndex(index);
+                                        return _MonthGrid(
+                                          month: month,
+                                          selectedDate: _selectedDate,
+                                          garbageTypesOf: _garbageTypesFor, // 日付ごとのゴミ種別判定
+                                          onDateTap: (d) => _onDateTap(d, currentMonth: month), // タップ処理
+                                          lang: _lang,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+const SizedBox(height: 12),
+
+                  // 2. 選択された日の詳細情報カード
+                  _SelectedInfoCard(
+                    selectedDate: _selectedDate,
+                    lang: _lang,
+                    garbageTextOf: _garbageTextFor,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 3. 詳細ガイドの表示/非表示ボタン
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => setState(() => _showGuide = !_showGuide),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(12),
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        _showGuide
+                            ? (_lang == UiLang.ja ? '詳細情報を非表示' : 'Hide guide')
+                            : (_lang == UiLang.ja ? '詳細情報を表示' : 'Show guide'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+
+                  // 4. ガイドパネル（アニメーション付き開閉）
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeOut,
+                    child: _showGuide
+                        ? Padding(
+                            key: const ValueKey('guide'),
+                            padding: const EdgeInsets.only(top: 10),
+                            child: _GarbageGuidePanel(
+                              lang: _lang,
+                            ),
+                          )
+                        : const SizedBox.shrink(key: ValueKey('empty')),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 5. 重要なお知らせカード
+                  _ImportantNoticeCard(
+                    lang: _lang,
+                    selectedArea: _selectedArea,
+                    items: _importantNoticeByArea[_selectedArea] ?? _commonImportantNotice,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 6. お問い合わせカード
+                  _InquiryCard(
+                    lang: _lang,
+                    selectedArea: _selectedArea,
+                    lines: _inquiryByArea[_selectedArea] ?? _commonInquiry,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 7. 週間スケジュールカード（選択中の日付の週を表示）
+                  _WeeklyScheduleCard(
+                    lang: _lang,
+                    // selectedDateがnullの場合は現在日時を渡す安全策
+                    selectedDate: _selectedDate ?? DateTime.now(),
+                    garbageTypesOf: _garbageTypesFor,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================== // セクション区切り
+// 補助ウィジェット：AppBar用ドロップダウン
+// =========================== // セクション区切り
+
+class _HeaderDropdown<T> extends StatelessWidget {
+  // AppBar内で使う装飾付きDropdown
+  final String label; // 表示ラベル
+  final T value; // 現在値
+  final List<T> items; // 候補一覧
+  final String Function(T) itemLabel; // 候補→表示文字変換
+  final ValueChanged<T> onChanged; // 選択変更通知
+  final double? width; 
+
+  const _HeaderDropdown({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.onChanged,
+    this.width,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width, 
+      height: 40, // 高さ固定
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFE1E5EE)), // 枠線
+        borderRadius: BorderRadius.circular(10), // 角丸
+        color: const Color(0xFFE7EBF3), // 背景
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10), // 内側余白
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isDense: true,
+          isExpanded: true, // これにより幅いっぱいまで広がる
+          icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF333333),
+          ),
+          items: items.map((v) {
+            // 表示文字の変換（ラベルがある場合）
+            // 親側で replaceFirst などをしている処理がここで反映されます
+            return DropdownMenuItem<T>(
+              value: v,
+              child: Text(
+                itemLabel(v),
+                overflow: TextOverflow.ellipsis, // 長い時は省略
+              ),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// =========================== // セクション区切り
+// 補助ウィジェット：年/月ドロップダウン // カレンダー操作用
+// =========================== // セクション区切り
+
+class _LabeledDropdown<T> extends StatelessWidget {
+  // InputDecoratorを使って「ラベル付き入力欄」風に見せるドロップダウン
+  final String label; // ラベル（例：'年', '月'）
+  final T value; // 現在値
+  final List<T> items; // 選択肢
+  final String Function(T) itemLabel; // 表示用変換関数
+  final ValueChanged<T> onChanged; // 変更通知
+
+  const _LabeledDropdown({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      // テキストフィールドのような枠とラベルを表示するためのラッパー
+      decoration: InputDecoration(
+        labelText: label, // 左上のラベル
+        isDense: true, // 縦幅を詰める
+        border: const OutlineInputBorder(), // 囲み枠
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 8,
+        ), // 内側の余白
+      ),
+      child: DropdownButtonHideUnderline(
+        // ドロップダウン自体の下線を消す（InputDecoratorの枠を使うため）
+        child: DropdownButton<T>(
+          value: value, // 現在値
+          isDense: true, // 縦幅詰め
+          isExpanded: true, // 横幅最大
+          items: items
+              .map(
+                (v) => DropdownMenuItem<T>(
+                  value: v,
+                  child: Text(itemLabel(v)), // 選択肢の文字
+                ),
+              )
+              .toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v); // 変更通知
+          },
+        ),
+      ),
+    ); // InputDecorator終わり
+  }
+} // _LabeledDropdown終わり
+
+// =========================== // セクション区切り
+// 補助ウィジェット：曜日行 // カレンダー上部の「日 月 火...」
+// =========================== // セクション区切り
+
+class _WeekdayRow extends StatelessWidget {
+  // 曜日ラベルを表示する行
+  final UiLang lang; // 言語設定（日/英切り替え用）
+
+  const _WeekdayRow({required this.lang});
+
+  @override
+  Widget build(BuildContext context) {
+    // 言語に応じた曜日ラベルリスト
+    final labels = (lang == UiLang.ja)
+        ? const ['日', '月', '火', '水', '木', '金', '土']
+        : const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return Container(
+      height: 40, // 行の高さ固定
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE7EBF3)), // 下線のみ描画
+        ),
+      ),
+      child: Row(
+        // 7つの曜日を均等配置
+        children: List.generate(
+          7,
+          (i) => Expanded(
+            child: Center(
+              child: Text(
+                labels[i], // 曜日文字
+                style: TextStyle(
+                  fontSize: 12, // フォントサイズ
+                  fontWeight: FontWeight.bold, // 太字
+                  // 色分けロジック：日曜(0)は赤、土曜(6)は青、平日は黒
+                  color: i == 0
+                      ? Colors.red
+                      : i == 6
+                          ? Colors.blue
+                          : Colors.black,
+                ),
+              ),
+            ),
+          ),
+        ), // List.generate終わり
+      ), // Row終わり
+    ); // Container終わり
+  }
+} // _WeekdayRow終わり
+
+// =========================== // セクション区切り
+// 補助ウィジェット：月グリッド（★複数色＋複数アイコン対応）
+// =========================== // セクション区切り
+
+// --- カレンダーの「月」ごとのグリッド表示クラス ---
+class _MonthGrid extends StatelessWidget {
+  final DateTime month;
+  final DateTime? selectedDate;
+  final List<GarbageType> Function(DateTime) garbageTypesOf;
+  final Function(DateTime) onDateTap;
+  final UiLang lang;
+
+  const _MonthGrid({
+    required this.month,
+    required this.selectedDate,
+    required this.garbageTypesOf,
+    required this.onDateTap,
+    required this.lang,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 月の初日と末日を計算
+    final firstDay = DateTime(month.year, month.month, 1);
+    final lastDay = DateTime(month.year, month.month + 1, 0);
+    final daysInMonth = lastDay.day;
+    
+    // 1日が何曜日か（日曜=0, 月曜=1...となるように調整）
+    // DateTime.weekdayは 月=1...日=7 なので、日曜始まりのグリッドにするなら調整が必要
+    // ここでは日曜始まり(0)〜土曜(6)のインデックスに変換します
+    final firstWeekdayIndex = (firstDay.weekday == 7) ? 0 : firstDay.weekday;
+
+    return GridView.builder(
+      physics: const NeverScrollableScrollPhysics(), // 親のスクロールを使うため
+      padding: const EdgeInsets.all(4),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7, // 1週間は7日
+        childAspectRatio: 0.85, // セルの縦横比
+        mainAxisSpacing: 2,
+        crossAxisSpacing: 2,
+      ),
+      // マスの数 = 空白マス(1日の前) + 日数
+      itemCount: firstWeekdayIndex + daysInMonth,
+      itemBuilder: (context, index) {
+        // 1日より前の空白セル
+        if (index < firstWeekdayIndex) {
+          return const SizedBox.shrink();
+        }
+
+        // 今日の日付を計算
+        final day = index - firstWeekdayIndex + 1;
+        final date = DateTime(month.year, month.month, day);
+        
+        // ゴミの種類を取得
+        final types = garbageTypesOf(date);
+        
+        // 選択されているか
+        final isSelected = selectedDate != null &&
+            selectedDate!.year == date.year &&
+            selectedDate!.month == date.month &&
+            selectedDate!.day == date.day;
+
+        // ★ここで個別のセルを描画
+        return GestureDetector(
+          onTap: () => onDateTap(date),
+          child: _DayCell(
+            date: date,
+            types: types,
+            isSelected: isSelected,
+          ),
+        );
+      },
+    );
+  }
+}
+
+// --- ★ここが重要：1日ごとのセル描画（分割ロジック） ---
+class _DayCell extends StatelessWidget {
+  final DateTime date;
+  final List<GarbageType> types;
+  final bool isSelected;
+
+  const _DayCell({
+    required this.date,
+    required this.types,
+    required this.isSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 枠線の色（選択時は青、通常は透明）
+    final borderColor = isSelected ? Colors.blue : Colors.transparent;
+    final borderWidth = isSelected ? 2.0 : 0.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, // ベース背景
+        border: Border.all(color: borderColor, width: borderWidth),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: isSelected
+            ? [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 4)]
+            : [],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4), // 中身も角丸に
+        child: Stack(
+          children: [
+            // -------------------------------------------
+            // 1. 背景色（左右分割ロジック）
+            // -------------------------------------------
+            if (types.isNotEmpty)
+              Row(
+                children: types.map((type) {
+                  // Expandedを使うことで、リストが1つなら全幅、2つなら50%ずつに自動分割される
+                  return Expanded(
+                    child: Container(
+                      color: garbageBgColor(type),
+                    ),
+                  );
+                }).toList(),
+              ),
+
+            // -------------------------------------------
+            // 2. 日付数字（左上）
+            // -------------------------------------------
+            Positioned(
+              top: 3,
+              left: 4,
+              child: Text(
+                '${date.day}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  // 日曜日は赤、その他は黒
+                  color: date.weekday == 7 ? Colors.red : Colors.black87,
+                ),
+              ),
+            ),
+
+            // -------------------------------------------
+            // 3. アイコン（中央）
+            // -------------------------------------------
+            if (types.isNotEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 14), // 日付と被らないように少し下げる
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: types.map((type) {
+                      // 2つの時は少し小さく(18)、1つの時は大きく(26)
+                      final size = types.length > 1 ? 18.0 : 26.0;
+                      return Icon(
+                        garbageIcon(type),
+                        color: garbageIconColor(type),
+                        size: size,
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
