@@ -13,6 +13,7 @@ import data_loader
 from collections import defaultdict
 from sqlalchemy import or_
 import time
+import calendar
 
 
 
@@ -131,30 +132,48 @@ def serve_static(path):
         # 存在しない場合は index.html を返す（Flutterの画面遷移対策）
         return send_from_directory(app.static_folder, 'index.html')
 
-# 機能A: カレンダー
+# 機能A: カレンダー (修正版)
 @app.route('/api/schedules', methods=['GET'])
 def get_schedules():
+    # 1. パラメータ取得 (アプリは area_id を送ってくるので両対応にする)
+    area_id = request.args.get('area_id', type=int) or request.args.get('area', type=int)
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)
-    area_id = request.args.get('area', type=int)
-    lang = request.args.get('lang', 'ja') 
+    
+    # 2. エラーチェック (地域IDだけは必須)
+    if not area_id:
+        return jsonify({"error": "area_id is required"}), 400
 
-    if not year or not month or not area_id:
-        return jsonify({"error": "year, month, and area are required"}), 400
+    # 3. クエリ作成
+    query = Schedule.query.filter(Schedule.area_id == area_id)
 
-    schedules = Schedule.query.filter_by(
-        area_id=area_id,
-        year=year,
-        month=month
-    ).all()
+    # 4. 日付範囲での絞り込み (DBには year/month列ではなく date列がある前提)
+    if year:
+        if month:
+            # 年と月がある場合 (その月の1日〜末日)
+            _, last_day = calendar.monthrange(year, month)
+            start_date = f"{year}-{month:02d}-01"
+            end_date = f"{year}-{month:02d}-{last_day}"
+            query = query.filter(Schedule.date >= start_date, Schedule.date <= end_date)
+        else:
+            # 年だけの場合 (1月1日〜12月31日)
+            start_date = f"{year}-01-01"
+            end_date = f"{year}-12-31"
+            query = query.filter(Schedule.date >= start_date, Schedule.date <= end_date)
 
+    # 5. データ取得
+    schedules = query.all()
+
+    # 6. アプリが期待する形式 ("trash_type_id" が重要！) に変換
     result = []
     for s in schedules:
-        type_name = get_translated_value(s.trash_type, 'name', lang)
         result.append({
             "date": s.date.strftime('%Y-%m-%d'),
-            "type": type_name,
+            "trash_type_id": s.trash_type_id,  # ★これがアプリの色分けに必須
+            # 必要であれば名前も含める
+            # "type_name": get_translated_value(s.trash_type, 'name', 'ja') 
         })
+
     return jsonify(result)
 
 # 機能B: エリア
