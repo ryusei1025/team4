@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../constants.dart'; // ← 【追加】ファイルの場所に合わせてパスを調整してください
 
 class TrashBin {
   final int id;
@@ -31,11 +32,12 @@ class TrashBin {
 }
 
 class TrashBinApi {
-    static const String baseUrl = 'https://unanimated-susannah-useably.ngrok-free.dev';
-
+  // ❌ 削除: 古いURL定義を消す
+  // static const String baseUrl = 'https://unanimated-susannah-useably.ngrok-free.dev';
 
   static Future<List<TrashBin>> fetchBins() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/trash_bins')); // ★app.pyのエンドポイントに合わせて修正
+    // ✅ 修正: constantsのURLを使うように変更
+    final res = await http.get(Uri.parse('${AppConstants.baseUrl}/api/trash_bins'));
 
     if (res.statusCode != 200) {
       throw Exception('API error: ${res.statusCode}');

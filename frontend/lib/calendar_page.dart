@@ -1,10 +1,12 @@
 import 'package:flutter/gestures.dart'; // マウスホイール操作用
 import 'package:flutter/material.dart'; // UI部品用
 import 'drawer_menu.dart'; // ドロワーメニューや言語設定
-import 'package:csv/csv.dart'; // CSV解析用
+// import 'package:csv/csv.dart'; // CSV解析用
 import 'package:flutter/services.dart' show rootBundle; // アセット読み込み用
 import 'dart:convert'; // JSONデコード用
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'constants.dart';
 
 // ==========================================
 // 1. 共通定義：ゴミ種別・基本設定
@@ -330,72 +332,64 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _loadTranslations(_lang);
   }
 
-  // ★【追加】CSVデータを読み込んで解析するメソッド
+  // ★修正 B: CSVではなくAPIからデータを取得してキャッシュする
   Future<void> _loadScheduleData() async {
+    // 選択中のエリア名（例: "中央区1"）からID（数字部分）を抽出する簡易ロジック
+    // ※本来はログイン情報やエリアID管理マスタから取得するのがベストです
+    final areaIdMatch = RegExp(r'(\d+)').firstMatch(_selectedArea);
+    final areaId = areaIdMatch != null ? int.parse(areaIdMatch.group(0)!) : 1;
+
+    // 年月の指定（必要であればパラメータに追加。今回は全件取得または現在の年を想定）
+    final year = _visibleYear;
+    
+    // APIのエンドポイント (backend/app.py で実装予定のルート)
+    // 例: GET /api/schedules?area_id=1&year=2025
+    final url = Uri.parse('${AppConstants.baseUrl}/api/schedules?area_id=$areaId&year=$year');
+
     try {
-      // 1. CSVファイルを文字列として読み込む
-      final rawData = await rootBundle.loadString('assets/schedules.csv');
+      debugPrint('Fetching schedule from: $url');
+      final response = await http.get(url);
 
-      // 2. CSVをリスト形式に変換
-      List<List<dynamic>> rows = const CsvToListConverter().convert(rawData);
+      if (response.statusCode == 200) {
+        // UTF-8でデコード
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        
+        final Map<DateTime, List<GarbageType>> newCache = {};
 
-      if (rows.isEmpty) return;
+        for (var item in data) {
+          // バックエンドからのレスポンス形式: {"date": "2025-04-01", "trash_type_id": 1} を想定
+          final dateStr = item['date'] as String;
+          final typeId = item['trash_type_id'] as int;
 
-      // 3. ヘッダー行（1行目）から、現在選択されているエリア（例: "中央区1"）の列番号を探す
-      final header = rows[0].map((e) => e.toString()).toList();
-      final columnIndex = header.indexOf(_selectedArea);
+          final date = DateTime.parse(dateStr);
+          // 時刻を切り捨てて「年月日」のみをキーにする
+          final dateKey = DateTime(date.year, date.month, date.day);
 
-      if (columnIndex == -1) {
-        print('Error: Area $_selectedArea not found in CSV header');
-        return;
-      }
-
-      // 4. データを解析してキャッシュを作る
-      final Map<DateTime, List<GarbageType>> newCache = {};
-
-      // 1行目はヘッダーなのでスキップして2行目からループ
-      for (int i = 1; i < rows.length; i++) {
-        final row = rows[i];
-        if (row.length <= columnIndex) continue; // データが欠けている行は飛ばす
-
-        // 日付を解析 (2列目にあると想定: "2025-10-01T00:00:00" 形式)
-        // ※CSVの仕様に合わせて列番号を調整してください。今回は日付が2列目(index 1)と仮定
-        final dateStr = row[1].toString();
-        DateTime? date;
-        try {
-          date = DateTime.parse(dateStr);
-        } catch (e) {
-          continue; // 日付パースエラーなら飛ばす
-        }
-
-        // ゴミIDを取得（CSV上の数字）
-        final cellValue = row[columnIndex];
-        final garbageId = int.tryParse(cellValue.toString());
-
-        if (garbageId != null) {
-          // ★修正：リストで返ってくるメソッドを使用
-          final types = _convertIdToGarbageList(garbageId);
-
+          final types = _convertIdToGarbageList(typeId);
+          
           if (types.isNotEmpty) {
-            final dateKey = DateTime(date.year, date.month, date.day);
-
-            // まだキーがなければ空リストを作成
             if (!newCache.containsKey(dateKey)) {
               newCache[dateKey] = [];
             }
-
-            // ★修正：リストの中身をすべて追加
-            newCache[dateKey]!.addAll(types);
+            // 重複を防ぎつつ追加
+            for (var type in types) {
+              if (!newCache[dateKey]!.contains(type)) {
+                newCache[dateKey]!.add(type);
+              }
+            }
           }
         }
-      }
 
-      // 5. 完了したら画面更新
-      setState(() {
-        _scheduleCache = newCache;
-      });
+        setState(() {
+          _scheduleCache = newCache;
+        });
+        debugPrint('Schedule loaded: ${newCache.length} days');
+      } else {
+        debugPrint('API Error: ${response.statusCode}');
+      }
     } catch (e) {
-      print('Error loading CSV: $e');
+      debugPrint('Connection Error: $e');
+      // エラー時はユーザーに通知するか、キャッシュがあればそれを使う等の処理
     }
   }
 
@@ -455,25 +449,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  // ★修正：Excel定義に合わせてIDをリストに変換
+  // ★修正: Excel/CSVのIDに合わせて、全てのゴミ種別をマッピングする
   List<GarbageType> _convertIdToGarbageList(int id) {
     switch (id) {
       case 1:
-        // 燃やせる（黄） ＋ スプレー（水色）
+        // ID 1: 燃やせるごみ ＋ スプレー缶
         return [GarbageType.burnable, GarbageType.spray];
+      
       case 2:
-        // 燃やせない（オレンジ） ＋ ライター（白）
+        // ID 2: 燃やせないごみ ＋ ライター類
         return [GarbageType.nonBurnable, GarbageType.lighter];
+      
       case 8:
-        // びん・缶・ペット, 乾電池
+        // ID 8: びん・缶・ペットボトル ＋ 乾電池
         return [GarbageType.recyclable, GarbageType.battery];
+      
       case 9:
-        return [GarbageType.plastic]; // プラ
+        // ID 9: 容器包装プラスチック
+        return [GarbageType.plastic];
+      
       case 10:
-        return [GarbageType.paper]; // 雑がみ
+        // ID 10: 雑がみ
+        return [GarbageType.paper];
+      
       case 11:
-        return [GarbageType.green]; // 枝・葉
+        // ID 11: 枝・葉・草
+        return [GarbageType.green];
+      
       default:
+        // 知らないIDが来たら何もしない
         return [];
     }
   }
