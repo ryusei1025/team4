@@ -1,6 +1,18 @@
 import sys
 import os
 
+
+# デバッグ用（確認後削除）
+print("=== ENV DEBUG ===")
+print("DATABASE_URL:", os.environ.get('DATABASE_URL', 'NOT SET'))
+print("SQLALCHEMY_DATABASE_URI:", os.environ.get('SQLALCHEMY_DATABASE_URI', 'NOT SET'))
+
+# 全環境変数を出力（古いURLが別名で潜んでいないか確認）
+for key, val in os.environ.items():
+    if 'dpg-d69' in val:
+        print(f"⚠️ 古いURL発見: {key} = {val}")
+print("=================")
+
 # VS Code等の環境でインポートエラー（解決できない）が出る場合の対策
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -14,6 +26,7 @@ from models import db, Area, TrashType, Schedule, TrashDictionary, TrashBin
 def seed_data():
     # pykakasiの準備
     kks = pykakasi.kakasi()
+    print(f"[DEBUG] DATABASE_URL = {app.config['SQLALCHEMY_DATABASE_URI']}")
 
     with app.app_context():
         # 1. データベースを一旦リセット (作り直し)

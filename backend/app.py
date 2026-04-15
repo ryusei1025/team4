@@ -39,7 +39,10 @@ app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.json.ensure_ascii = False
 
 # データベース設定
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'postgresql://student:password@localhost/banana_db'
+database_url = os.environ.get('DATABASE_URL')
+if not database_url:
+    raise ValueError("DATABASE_URL is not set! Check environment variables.")
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 CORS(app)
